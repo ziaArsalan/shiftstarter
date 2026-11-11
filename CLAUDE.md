@@ -1,6 +1,6 @@
-# Pharmacy Staffing Marketplace — Claude Entry Point
+# ShiftStarter — Claude Entry Point
 
-Web platform connecting pharmacists/workers with pharmacies & employers.
+**ShiftStarter** ([shiftstarter.ca](https://shiftstarter.ca)) — web platform connecting pharmacists/workers with pharmacies & employers.
 Stack: **React + Vite + Tailwind** (client) · **Node + Express** (server) · **PostgreSQL + Prisma** · **JWT + RBAC** · **Stripe**.
 
 This file is the entry point only. **Do not duplicate content here — follow the references.**
@@ -25,6 +25,7 @@ This file is the entry point only. **Do not duplicate content here — follow th
 | Topic | File |
 |---|---|
 | Architecture, stack, data model, API, deploy | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) |
+| Brand (name, domain, logo, colors) | [docs/BRAND.md](docs/BRAND.md) |
 | Milestone pipeline (how /start runs) | [docs/WORKFLOW.md](docs/WORKFLOW.md) |
 | Agents & model tiers | [docs/AGENTS.md](docs/AGENTS.md) |
 | Coding standards & env setup | [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md) |

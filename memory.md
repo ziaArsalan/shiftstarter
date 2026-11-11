@@ -3,9 +3,12 @@
 Durable, portable knowledge for any Claude session on any machine. Keep concise. Add a significant reusable decision only with user approval.
 
 ## Identity
-- Web-based **Pharmacy Staffing Marketplace** connecting workers/pharmacists with pharmacies/employers.
+- Product: **ShiftStarter** (stylized "ShiftStarter AI"). Domain: **shiftstarter.ca**. Racing/"fast start" brand (checkered flag + speed swoosh).
+- Web-based **pharmacy staffing marketplace** connecting workers/pharmacists with pharmacies/employers.
 - Client: Bobby. Prepared by: Zia Arsalan. Fixed cost **$2,200**, 6–8 weeks, **5 milestones**.
-- Source of truth: `QUOTATION - Bobby Pharma APP (1).pdf`.
+- Source of truth: `QUOTATION - Bobby Pharma APP (1).pdf`. Brand: `docs/BRAND.md`.
+- Brand colors: navy `#0A2A5E`, blue `#1565E0`, azure `#2E9BFF` on white (in `client/tailwind.config.js` as `brand.*`). Logo: `client/public/shiftstarter-logo.png`.
+- Internal identifiers (GitHub repo `pharmacy-staffing`, npm package names) stay as-is; only user-facing name is ShiftStarter.
 
 ## Stack (locked)
 - **PERN**: React+Vite+Tailwind / Node+Express / **PostgreSQL + Prisma** / JWT+RBAC / Stripe.

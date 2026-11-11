@@ -1,4 +1,7 @@
-# Architecture — Pharmacy Staffing Marketplace
+# Architecture — ShiftStarter (Pharmacy Staffing Marketplace)
+
+Product: **ShiftStarter** · Domain: **shiftstarter.ca** · Brand: [BRAND.md](BRAND.md).
+
 
 Status: **M1 deliverable.** Source of truth for stack, data model, API, and flows. Feature code (M2+) must conform to this document; deviations require approval and a DECISIONS.md entry.
 

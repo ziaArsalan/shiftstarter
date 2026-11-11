@@ -1,6 +1,8 @@
-# Pharmacy Staffing Marketplace
+# ShiftStarter — Pharmacy Staffing Marketplace
 
-Web platform connecting pharmacists/workers with pharmacies & employers. Workers find and apply for shifts; pharmacies post shifts, review applications, manage bookings, message workers, and handle payments.
+**ShiftStarter** ([shiftstarter.ca](https://shiftstarter.ca)) is a web platform connecting pharmacists/workers with pharmacies & employers. Workers find and apply for shifts; pharmacies post shifts, review applications, manage bookings, message workers, and handle payments.
+
+Brand: [docs/BRAND.md](docs/BRAND.md).
 
 ## Stack
 React + Vite + Tailwind (client) · Node + Express (server) · PostgreSQL + Prisma · JWT + RBAC · Stripe.
