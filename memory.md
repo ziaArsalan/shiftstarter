@@ -24,7 +24,8 @@ Durable, portable knowledge for any Claude session on any machine. Keep concise.
 - architect, developer = **opus**; planner, qa-tester, bug-fixer = **sonnet**; git-publisher = **haiku**.
 
 ## Environment notes
-- Node 22, npm 10, git, `gh` 2.92 (**not yet authenticated** — run `gh auth login` before pushing), psql 14, Docker 28 all present on the dev machine (2026-11-11).
+- Node 22, npm 10, git, psql 14, Docker 28 present on the dev machine (2026-11-11).
+- **GitHub remote:** `git@github.com:devtronics-co/pharmacy-staffing.git` (origin). Push over **SSH** (key `ziaArsalan` works); `gh` CLI is NOT authenticated and HTTPS has no stored credential — use SSH for push.
 - QA: Playwright **interactive-driving**; installed locally in M2 when first needed.
 
 ## Conventions

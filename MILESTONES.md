@@ -11,7 +11,7 @@ Billing/scope map to the quotation ($2,200 total).
 ## M1 — Planning & Architecture
 - **Priority:** P0
 - **Depends on:** —
-- **Status:** done (2026-11-11 — committed locally `7782ab7`; GitHub push pending `gh auth login`)
+- **Status:** done (2026-11-11 — committed & pushed to origin/main)
 - **Amount:** $220
 - **Goal:** Lock the architecture before any feature code.
 - **Deliverables:** `docs/ARCHITECTURE.md`; Prisma data model + ERD; API endpoint map; RBAC permission matrix; UI screen inventory + primary user flows; empty `client/` + `server/` scaffold with tooling (TS, lint, format, env); `docs/DECISIONS.md` + `memory.md` seeded.
