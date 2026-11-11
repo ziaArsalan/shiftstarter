@@ -26,7 +26,13 @@ Durable, portable knowledge for any Claude session on any machine. Keep concise.
 ## Environment notes
 - Node 22, npm 10, git, psql 14, Docker 28 present on the dev machine (2026-11-11).
 - **GitHub remote:** `git@github.com:devtronics-co/pharmacy-staffing.git` (origin). Push over **SSH** (key `ziaArsalan` works); `gh` CLI is NOT authenticated and HTTPS has no stored credential — use SSH for push.
-- QA: Playwright **interactive-driving**; installed locally in M2 when first needed.
+- QA: Playwright **interactive-driving**; Chromium browser installed (2026-11-11).
+
+## Local dev setup (M2 prep, 2026-11-11)
+- Deps installed (client + server). Prisma client generated. Both apps build clean; server `/health` OK.
+- **Dev DB:** Docker container `pharmacy-postgres` → `postgres:16`, mapped **host port 5433** (5432 was taken by a local Postgres). Creds `postgres/postgres`, db `pharmacy_marketplace`. Start/stop: `docker start|stop pharmacy-postgres`.
+- Initial migration `20261111110629_init` applied — all 16 tables created.
+- **`server/.env` is NOT committed and the tool is blocked from writing it** (settings deny). It must exist locally with `DATABASE_URL="postgresql://postgres:postgres@localhost:5433/pharmacy_marketplace?schema=public"` + JWT dev secrets. Create by hand.
 
 ## Conventions
 - API under `/api/v1`, errors as `{ error: { code, message } }`.
