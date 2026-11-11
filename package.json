@@ -1,0 +1,17 @@
+{
+  "name": "pharmacy-staffing-marketplace",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Web platform connecting pharmacists/workers with pharmacies & employers. PERN stack.",
+  "scripts": {
+    "install:all": "npm --prefix server install && npm --prefix client install",
+    "dev:server": "npm --prefix server run dev",
+    "dev:client": "npm --prefix client run dev",
+    "lint": "npm --prefix server run lint && npm --prefix client run lint",
+    "typecheck": "npm --prefix server run typecheck && npm --prefix client run typecheck",
+    "build": "npm --prefix server run build && npm --prefix client run build"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}

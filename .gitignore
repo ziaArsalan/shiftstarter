@@ -1,0 +1,43 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Env & secrets — NEVER commit (except *.example)
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+*.cert
+*.crt
+
+# Builds
+dist/
+build/
+client/dist/
+server/dist/
+*.tsbuildinfo
+
+# Prisma
+server/prisma/migrations/dev.db*
+
+# Logs
+*.log
+npm-debug.log*
+logs/
+
+# OS / editor
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Test / coverage
+coverage/
+playwright-report/
+test-results/
+
+# Misc
+*.local

@@ -1,0 +1,401 @@
+// Pharmacy Staffing Marketplace — data model (M1 deliverable).
+// Source of truth for the PostgreSQL schema. Migrations are generated in M2
+// when a database is connected (`npx prisma migrate dev`).
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ---------- Enums ----------
+
+enum Role {
+  WORKER
+  PHARMACY
+  ADMIN
+}
+
+enum UserStatus {
+  ACTIVE
+  SUSPENDED
+  PENDING
+}
+
+enum CredentialType {
+  LICENSE
+  GOVERNMENT_ID
+  CERTIFICATION
+  INSURANCE
+  OTHER
+}
+
+enum VerificationStatus {
+  PENDING
+  APPROVED
+  REJECTED
+}
+
+enum ShiftStatus {
+  DRAFT
+  OPEN
+  FILLED
+  CANCELLED
+  COMPLETED
+}
+
+enum ApplicationStatus {
+  PENDING
+  ACCEPTED
+  REJECTED
+  WITHDRAWN
+}
+
+enum BookingStatus {
+  CONFIRMED
+  CHECKED_IN
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentType {
+  CHARGE
+  PAYOUT
+  REFUND
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCEEDED
+  FAILED
+  REFUNDED
+}
+
+enum NotificationChannel {
+  IN_APP
+  EMAIL
+  PUSH
+}
+
+enum DisputeStatus {
+  OPEN
+  UNDER_REVIEW
+  RESOLVED
+  REJECTED
+}
+
+// ---------- Identity ----------
+
+model User {
+  id            String     @id @default(cuid())
+  email         String     @unique
+  passwordHash  String
+  role          Role
+  status        UserStatus @default(ACTIVE)
+  emailVerified Boolean    @default(false)
+  createdAt     DateTime   @default(now())
+  updatedAt     DateTime   @updatedAt
+
+  workerProfile   WorkerProfile?
+  pharmacyProfile PharmacyProfile?
+  refreshTokens   RefreshToken[]
+  notifications   Notification[]
+  sentMessages    Message[]        @relation("MessageSender")
+  reviewsAuthored Review[]         @relation("ReviewAuthor")
+  reviewsReceived Review[]         @relation("ReviewTarget")
+  disputesRaised  Dispute[]        @relation("DisputeRaisedBy")
+
+  @@index([role])
+}
+
+model RefreshToken {
+  id        String   @id @default(cuid())
+  userId    String
+  tokenHash String   @unique
+  expiresAt DateTime
+  revokedAt DateTime?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------- Worker side ----------
+
+model WorkerProfile {
+  id               String   @id @default(cuid())
+  userId           String   @unique
+  firstName        String
+  lastName         String
+  phone            String?
+  professionalTitle String? // e.g. Pharmacist, Pharmacy Technician
+  licenseNumber    String?
+  yearsExperience  Int?
+  bio              String?
+  hourlyRateExpectation Decimal? @db.Decimal(10, 2)
+  // Location
+  addressLine1     String?
+  city             String?
+  state            String?
+  postalCode       String?
+  country          String?
+  latitude         Float?
+  longitude        Float?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  credentials  Credential[]
+  availability Availability[]
+  applications Application[]
+  bookings     Booking[]
+
+  @@index([city, state])
+}
+
+model Credential {
+  id         String             @id @default(cuid())
+  workerId   String
+  type       CredentialType
+  fileUrl    String
+  status     VerificationStatus @default(PENDING)
+  issuedAt   DateTime?
+  expiresAt  DateTime?
+  reviewedBy String? // admin User.id
+  reviewedAt DateTime?
+  notes      String?
+  createdAt  DateTime           @default(now())
+
+  worker WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+  @@index([status])
+}
+
+model Availability {
+  id        String   @id @default(cuid())
+  workerId  String
+  startAt   DateTime
+  endAt     DateTime
+  createdAt DateTime @default(now())
+
+  worker WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+
+  @@index([workerId])
+}
+
+// ---------- Pharmacy side ----------
+
+model PharmacyProfile {
+  id           String   @id @default(cuid())
+  userId       String   @unique
+  businessName String
+  description  String?
+  contactPhone String?
+  website      String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  locations PharmacyLocation[]
+  shifts    Shift[]
+}
+
+model PharmacyLocation {
+  id           String   @id @default(cuid())
+  pharmacyId   String
+  name         String
+  addressLine1 String
+  addressLine2 String?
+  city         String
+  state        String
+  postalCode   String
+  country      String
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime @default(now())
+
+  pharmacy PharmacyProfile @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  shifts   Shift[]
+
+  @@index([pharmacyId])
+  @@index([city, state])
+}
+
+// ---------- Marketplace ----------
+
+model Shift {
+  id                  String      @id @default(cuid())
+  pharmacyId          String
+  locationId          String
+  title               String
+  description         String?
+  roleRequired        String // e.g. Pharmacist, Technician
+  startAt             DateTime
+  endAt               DateTime
+  hourlyRate          Decimal     @db.Decimal(10, 2)
+  slots               Int         @default(1)
+  requiredCredentials CredentialType[]
+  status              ShiftStatus @default(DRAFT)
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  pharmacy     PharmacyProfile  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  location     PharmacyLocation @relation(fields: [locationId], references: [id])
+  applications Application[]
+  booking      Booking?
+
+  @@index([status])
+  @@index([startAt])
+  @@index([pharmacyId])
+}
+
+model Application {
+  id        String            @id @default(cuid())
+  shiftId   String
+  workerId  String
+  status    ApplicationStatus @default(PENDING)
+  coverNote String?
+  appliedAt DateTime          @default(now())
+  decidedAt DateTime?
+
+  shift   Shift         @relation(fields: [shiftId], references: [id], onDelete: Cascade)
+  worker  WorkerProfile @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  booking Booking?
+
+  @@unique([shiftId, workerId])
+  @@index([workerId])
+  @@index([status])
+}
+
+model Booking {
+  id            String        @id @default(cuid())
+  shiftId       String        @unique
+  workerId      String
+  applicationId String        @unique
+  status        BookingStatus @default(CONFIRMED)
+  confirmedAt   DateTime      @default(now())
+  checkedInAt   DateTime?
+  completedAt   DateTime?
+  cancelledAt   DateTime?
+
+  shift        Shift         @relation(fields: [shiftId], references: [id])
+  worker       WorkerProfile @relation(fields: [workerId], references: [id])
+  application  Application   @relation(fields: [applicationId], references: [id])
+  payments     Payment[]
+  reviews      Review[]
+  dispute      Dispute?
+  conversation Conversation?
+
+  @@index([workerId])
+  @@index([status])
+}
+
+// ---------- Messaging ----------
+
+model Conversation {
+  id         String    @id @default(cuid())
+  bookingId  String?   @unique
+  createdAt  DateTime  @default(now())
+  updatedAt  DateTime  @updatedAt
+
+  booking  Booking?  @relation(fields: [bookingId], references: [id])
+  messages Message[]
+}
+
+model Message {
+  id             String   @id @default(cuid())
+  conversationId String
+  senderId       String
+  body           String
+  readAt         DateTime?
+  createdAt      DateTime @default(now())
+
+  conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  sender       User         @relation("MessageSender", fields: [senderId], references: [id])
+
+  @@index([conversationId])
+}
+
+// ---------- Notifications ----------
+
+model Notification {
+  id        String              @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  body      String?
+  channel   NotificationChannel @default(IN_APP)
+  readAt    DateTime?
+  data      Json?
+  createdAt DateTime            @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ---------- Payments ----------
+
+model Payment {
+  id                    String        @id @default(cuid())
+  bookingId             String
+  payerUserId           String
+  payeeUserId           String
+  type                  PaymentType
+  status                PaymentStatus @default(PENDING)
+  amountCents           Int
+  currency              String        @default("usd")
+  stripePaymentIntentId String?
+  stripeTransferId      String?
+  createdAt             DateTime      @default(now())
+  updatedAt             DateTime      @updatedAt
+
+  booking Booking @relation(fields: [bookingId], references: [id])
+
+  @@index([bookingId])
+  @@index([status])
+}
+
+// ---------- Reviews ----------
+
+model Review {
+  id           String   @id @default(cuid())
+  bookingId    String
+  authorUserId String
+  targetUserId String
+  rating       Int // 1..5
+  comment      String?
+  createdAt    DateTime @default(now())
+
+  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author  User    @relation("ReviewAuthor", fields: [authorUserId], references: [id])
+  target  User    @relation("ReviewTarget", fields: [targetUserId], references: [id])
+
+  @@unique([bookingId, authorUserId])
+  @@index([targetUserId])
+}
+
+// ---------- Disputes ----------
+
+model Dispute {
+  id             String        @id @default(cuid())
+  bookingId      String        @unique
+  raisedByUserId String
+  reason         String
+  description    String?
+  status         DisputeStatus @default(OPEN)
+  resolutionNote String?
+  createdAt      DateTime      @default(now())
+  resolvedAt     DateTime?
+
+  booking  Booking @relation(fields: [bookingId], references: [id])
+  raisedBy User    @relation("DisputeRaisedBy", fields: [raisedByUserId], references: [id])
+
+  @@index([status])
+}
