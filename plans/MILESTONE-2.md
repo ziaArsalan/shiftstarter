@@ -1,169 +1,151 @@
-# Plan — M2: Core Platform & User Roles
+# Plan — M2 (rebuild): Core Platform & Multi-Tenant Roles on Supabase
 
-Status: **awaiting approval.** Conforms to docs/ARCHITECTURE.md §4 (RBAC), §6 (API), DEVELOPMENT.md conventions, ADR-004.
+Status: **awaiting approval.** Supersedes the M2 v1 plan (custom JWT, 3-role, local Postgres). Conforms to the revised docs/ARCHITECTURE.md (§2 stack, §4 auth/tenancy/RBAC, §5 data model, §6 API, §9 storage) and DECISIONS.md ADR-008..ADR-012.
 
 ## 1. Goal and scope
-Deliver the identity and profile foundation: JWT auth (access + refresh), RBAC, registration/login, worker profile, pharmacy profile + locations, credential upload, admin shell, and a responsive client shell. All under `/api/v1`.
+Rebuild the identity + profile foundation on **Supabase** with the **multi-tenant SaaS** model: Supabase Auth, `Profile` provisioning, Organizations + Memberships (OWNER/MANAGER), worker profiles (4 worker roles), org locations, credential upload on Supabase Storage, a pharmacy-chain catalog, and a super-admin portal shell. All business logic under `/api/v1`; tenant isolation via RLS + service scoping.
 
-**In scope:** Auth, workers profile + credentials, pharmacies profile + locations, a minimal admin API (users list, credential queue and approve/reject), client shell, admin shell.
-**Out of scope (later milestones):** Availability endpoints (M3, availability and matching), shifts, applications, bookings, messaging, payments, email verification and password reset (not in M2 scope; see Decisions), notifications.
+**In scope:** Supabase Auth integration (client + server JWKS verify); Profile bootstrap; orgs + memberships; worker profiles; org locations; credentials on Supabase Storage; pharmacy-chain catalog (super-admin CRUD + selection); super-admin shell (users, orgs, credential queue, chains); client shell + role-aware routing; schema migrated to Supabase; RLS policies live.
+**Out of scope (later):** availability + matching (M3), shifts/applications/bookings (M3), rewards earn/redeem + Blackhawk (M3b — schema only in M2), payments/messaging/notifications/reviews (M4). Rewards tables exist in the schema but no earn/redeem logic is wired in M2.
 
-Already in place: scaffold, Postgres on 5433 with all 16 tables migrated, `server/.env`. `/health` exists and must keep working.
+## 2. What survives the checkpoint vs. what is replaced
 
-## 2. Build order
-1. **Phase A – Server foundation:** config/env validation, error handling, Prisma singleton, `/api/v1` router, Zod validate middleware.
-2. **Phase B – Auth:** register, login, refresh (rotation), logout, me; `requireAuth` and `requireRole`.
-3. **Phase C – Profiles:** worker profile, pharmacy profile, locations CRUD with ownership checks.
-4. **Phase D – Credentials:** storage adapter, upload/list/delete, authenticated download, admin approve/reject.
-5. **Phase E – Client shell and auth:** routing, API client, AuthContext, protected routes, login/register.
-6. **Phase F – Client role pages:** worker and pharmacy dashboards/profile/credentials/locations, admin shell.
-7. **Phase G – Hardening:** admin seed script, lint/typecheck/build, README server setup notes, `.env.example` updates.
+**Survives / adapts (from commit e1d825a):**
+- Repo layout, TS/lint/format tooling, `/health`, env-validation pattern (`config/env.ts`), error handling (`lib/errors.ts`), Zod validate middleware, `routes/index.ts` mounting, Prisma singleton.
+- The **`StorageProvider` interface** (`lib/storage/types.ts`) — kept as-is; local-disk impl replaced by a Supabase impl.
+- Module shape (routes → controller → service → schemas) for workers/orgs/admin.
+- Client shell structure (router, providers, feature folders, brand components, RequireAuth/RequireRole concept), re-pointed at Supabase.
+- Credential `fileName/mimeType/sizeBytes` fields and upload validation (magic-byte, size/mime limits).
 
-## 3. Server changes (`server/src/`)
-Layout (routes -> controllers -> services, per conventions):
+**Replaced / removed:**
+- **Auth stack:** `lib/tokens.ts`, `RefreshToken` model, argon2 hashing, cookie-based refresh, `/auth/register|login|refresh|logout` — replaced by Supabase Auth + JWKS verify. `middleware/auth.ts` now verifies a Supabase token and loads `req.auth`.
+- **Role model:** `Role` enum / `User` / `PharmacyProfile` → `Profile` + `Organization` + `Membership` + `WorkerRole`/`PlatformRole`/`OrgRole`.
+- **DB host + migrations:** local Postgres (5433) → Supabase; existing migrations reset and regenerated against Supabase. The M2 v1 `m2_credential_file_meta` migration is absorbed into the new baseline.
+- **Storage impl:** local disk → Supabase Storage.
+- **Deps:** remove `jsonwebtoken`, `argon2`/`bcryptjs`, `cookie-parser`; add `@supabase/supabase-js`, `jose`.
+
+## 3. Build order
+1. **Phase A — Supabase + schema baseline:** point Prisma at Supabase (`DATABASE_URL` pooled + `DIRECT_URL`); reset migration history; `prisma migrate dev` to create the new baseline; author + apply RLS policy SQL (`server/supabase/policies/`); seed platform `RewardPolicy` (500 cents) and the super admin.
+2. **Phase B — Auth (server):** JWKS verify middleware → `req.auth` {profile, memberships, workerProfile}; `GET /auth/me`; `POST /auth/bootstrap` (or DB trigger — see open decision) to create `Profile` + worker/org on first login; RBAC middleware (`requirePlatformRole`, `requireOrgRole`, `requireWorker`).
+3. **Phase C — Orgs & memberships:** org profile CRUD (owner), member invite/remove (owner), locations CRUD (owner/manager) with tenant scoping.
+4. **Phase D — Worker profiles:** profile CRUD (role/license/rate/location).
+5. **Phase E — Credentials on Supabase Storage:** Supabase `StorageProvider` impl; upload/list/delete; authenticated download (stream or short-lived signed URL); super-admin approve/reject.
+6. **Phase F — Pharmacy-chain catalog:** super-admin CRUD; `GET /chains` for selection; logo upload to `brand-assets`.
+7. **Phase G — Client:** `supabase-js` client + session; AuthContext bootstrapping via Supabase session → `/auth/me`; register intent picker (worker vs pharmacy); role-aware routing; worker profile/credentials pages; org profile/members/locations pages; super-admin shell (users, orgs, credential queue, chains).
+8. **Phase H — Hardening:** super-admin seed script (Supabase Admin API sets `app_metadata` claim + Profile), lint/typecheck/build, `.env.example` updates, README Supabase setup notes.
+
+## 4. Server structure (`server/src/`)
 ```
-config/env.ts            Zod-parsed env (fail fast)
-lib/prisma.ts            PrismaClient singleton
-lib/errors.ts            AppError(code,status,message); errorHandler -> { error:{code,message} }
-lib/tokens.ts            sign/verify access JWT; generate/hash refresh token
-lib/storage/             StorageProvider interface + local-disk impl (+ S3 impl if approved)
-middleware/auth.ts       requireAuth (verify Bearer access JWT -> req.user {id, role})
-middleware/rbac.ts       requireRole(...roles)
-middleware/validate.ts   validate({body,query,params}) with Zod
-middleware/upload.ts     multer config (size/mime limits)
-modules/auth/            auth.routes|controller|service|schemas
+config/env.ts            + SUPABASE_URL, SUPABASE_ANON_KEY, SUPABASE_SERVICE_ROLE_KEY, SUPABASE_JWKS_URL, DATABASE_URL, DIRECT_URL
+lib/prisma.ts            PrismaClient singleton (Supabase connection)
+lib/supabase.ts          service-role client (admin auth + storage)
+lib/jwks.ts              cached JWKS verifier (jose) for Supabase access tokens
+lib/errors.ts            unchanged
+lib/storage/             StorageProvider interface (kept) + supabase.ts impl (local.ts retained for tests)
+middleware/auth.ts       verify Supabase JWT -> load Profile/memberships -> req.auth
+middleware/rbac.ts       requirePlatformRole / requireOrgRole / requireWorker
+middleware/validate.ts   unchanged (Zod)
+middleware/upload.ts     multer (size/mime + magic-byte)
+modules/auth/            me, bootstrap
 modules/workers/         profile + credentials
-modules/pharmacies/      profile + locations
-modules/admin/           users, credentials review
-routes/index.ts          mounts /api/v1; app.ts wires it, json error handler, cookie-parser, helmet, rate limit
-prisma/seed.ts           creates an initial ADMIN from env (ADMIN_EMAIL/ADMIN_PASSWORD)
+modules/orgs/            org profile, members, locations
+modules/chains/          catalog (public read; admin CRUD)
+modules/admin/           users, orgs, credential review
+prisma/seed.ts           platform RewardPolicy + super admin (idempotent)
+supabase/policies/*.sql  RLS policies (versioned, applied via migration)
 ```
 
-### Endpoints (all `/api/v1`)
+### Endpoints (all `/api/v1`; auth = Supabase Bearer)
 | Endpoint | Access | Notes |
 |---|---|---|
-| `POST /auth/register` | public | body: email, password, role in {WORKER, PHARMACY} (ADMIN never self-registers); worker also firstName/lastName, pharmacy businessName. Creates User + empty-ish profile in one transaction. Returns user + access token; sets refresh cookie. 409 on duplicate email. |
-| `POST /auth/login` | public | Generic "Invalid email or password" error; rejects SUSPENDED users (403). Rate-limited. |
-| `POST /auth/refresh` | refresh token | Rotation: revoke presented token, issue new pair. Reuse of a revoked token revokes all that user's tokens (theft detection). |
-| `POST /auth/logout` | refresh token | Sets `revokedAt`, clears cookie. |
-| `GET /auth/me` | any authed | User + role + profile summary. |
-| `GET/PUT /workers/me/profile` | WORKER (ADMIN per matrix via later admin tools) | Fields from WorkerProfile. |
-| `GET/POST /workers/me/credentials`, `DELETE /workers/me/credentials/:id` | WORKER | multipart upload (field `file`, plus type, issuedAt?, expiresAt?). Delete only if owned; removes stored file. Re-upload after reject allowed. |
-| `GET /workers/me/credentials/:id/file` | owner or ADMIN | Streams the file after an auth check (no public URLs). Small addition beyond §6 needed so documents are viewable. |
-| `GET/PUT /pharmacies/me/profile` | PHARMACY | |
-| `GET/POST/PUT/DELETE /pharmacies/me/locations(/:id)` | PHARMACY | Ownership enforced in the service; delete blocked later if location has shifts (M3). |
-| `GET /admin/users`, `PATCH /admin/users/:id` | ADMIN | list with role/status filter + pagination; PATCH status (ACTIVE/SUSPENDED). Admin cannot suspend self. |
-| `GET /admin/credentials?status=` , `PATCH /admin/credentials/:id` | ADMIN | approve/reject with notes; sets reviewedBy/reviewedAt. |
-| `GET /admin/reports` | deferred | stub not built in M2. |
+| `GET /auth/me` | any authed | resolved Profile + memberships + workerProfile + capabilities |
+| `POST /auth/bootstrap` | any authed | first-login: create Profile (+ worker or org+owner membership) from sign-up intent; idempotent |
+| `GET/PUT /workers/me/profile` | worker | workerRole, license, rate, location |
+| `GET/POST /workers/me/credentials`, `DELETE /workers/me/credentials/:id` | worker | multipart upload to Supabase Storage; delete only if owned |
+| `GET /workers/me/credentials/:id/file` | owner or super admin | authenticated download (stream or signed URL) |
+| `GET/PUT /orgs/me` | owner | org profile + chain selection |
+| `GET /orgs/me/members`, `POST/DELETE /orgs/me/members(/:id)` | owner | invite by email / remove; cannot remove last owner |
+| `GET/POST/PUT/DELETE /orgs/me/locations(/:id)` | owner/manager | tenant-scoped; delete blocked if location has shifts (M3) |
+| `GET /chains` | any authed | catalog for selection + logos |
+| `POST/PUT/DELETE /admin/chains(/:id)` | super admin | manage catalog + logo upload |
+| `GET /admin/users`, `PATCH /admin/users/:id` | super admin | list/filter; set status (ACTIVE/SUSPENDED); cannot suspend self |
+| `GET /admin/orgs` | super admin | cross-tenant org list |
+| `GET /admin/credentials?status=`, `PATCH /admin/credentials/:id` | super admin | approve/reject with notes |
 
-`GET /workers/me/availability` etc. are deferred to M3.
+## 5. Database & RLS
+- New Prisma baseline against Supabase (see schema.prisma header note). `Profile.id` is UUID = `auth.uid()`.
+- RLS enabled on all `public` business tables. Policy themes (SQL in `server/supabase/policies/`):
+  - `Profile`: self read/update; super admin all.
+  - Org-scoped tables (Organization, Membership, PharmacyLocation, Shift, Application, Booking, reward rows): access only to members of the owning org (via `Membership` matched on `auth.uid()`); super admin all.
+  - `PharmacyChain`: read to all authenticated; write to super admin only.
+  - Worker-owned tables (WorkerProfile, Credential, Availability, RewardAccount/Transaction/Redemption): owner by `auth.uid()`; super admin all.
+  - Credential storage objects: private bucket; no public access.
+- Express connects with a privileged role (bypasses RLS) → services MUST filter every org-scoped query by the caller's org. RLS is the authoritative guard for the supabase-js/client path. (See open decision on running Prisma under RLS.)
 
-### Security details
-- Password: min 8 chars, hashed (see Decision 2).
-- Access JWT: 15 min, claims `sub`, `role`. Refresh: 256-bit random opaque token, 7-30 days, only SHA-256 hash stored in `RefreshToken.tokenHash` (already unique).
-- Zod at every boundary; helmet; CORS restricted to `CLIENT_ORIGIN` with `credentials: true`; rate limit on auth routes; normalise email to lowercase.
-- Uploads: allowed mime pdf/jpeg/png (verify magic bytes, not just header), max 10 MB, random storage key, original filename sanitised.
-
-## 4. Database changes
-Initial migration already covers all tables. Proposed **one small additive migration** `m2_credential_file_meta`:
-- `Credential`: add `fileName String`, `mimeType String`, `sizeBytes Int`; `fileUrl` is used as the storage key (documented, no rename to avoid churn).
-- No destructive changes. Run `prisma migrate dev`.
-- Seed script is idempotent for the admin user.
-
-## 5. API changes
-New under `/api/v1` as listed; errors always `{ error: { code, message } }` (codes e.g. VALIDATION_ERROR, UNAUTHORIZED, FORBIDDEN, NOT_FOUND, CONFLICT). Validation errors include field details. `/health` unchanged.
-
-## 6. Client changes (`client/src/`)
-New deps and structure (feature folders):
+## 6. Client (`client/src/`)
 ```
-app/router.tsx           react-router; layouts
-app/providers.tsx        QueryClient + AuthProvider
-lib/api.ts               fetch wrapper: base VITE_API_URL, attaches access token, on 401 tries one refresh then retries, else logs out
-features/auth/           AuthContext (user, role, login, register, logout, bootstrap via refresh -> /auth/me), RequireAuth, RequireRole, LoginPage, RegisterPage (role picker)
-features/worker/         WorkerDashboard, ProfilePage, CredentialsPage (upload, list, status badge, delete)
-features/pharmacy/       PharmacyDashboard, BusinessProfilePage, LocationsPage (add/edit/delete)
-features/admin/          AdminLayout (sidebar), AdminDashboard (stat tiles placeholder), UsersPage (list + suspend), CredentialQueuePage (approve/reject)
-components/              Button, Input, Card, Badge, Spinner, FormField, Toast, AppShell (header with logo, role nav, mobile hamburger)
+lib/supabase.ts          supabase-js client (VITE_SUPABASE_URL, VITE_SUPABASE_ANON_KEY)
+lib/api.ts               fetch wrapper: attaches current Supabase access token; on 401 refreshes session once
+features/auth/           AuthContext (Supabase session -> /auth/me), RequireAuth, RequirePlatformRole, RequireOrgRole, Login, Register (intent picker: worker vs pharmacy), ForgotPassword
+features/worker/         Dashboard, ProfilePage, CredentialsPage
+features/org/            Dashboard, OrgProfilePage (chain picker), MembersPage, LocationsPage
+features/admin/          AdminLayout, Users, Orgs, CredentialQueue, ChainsPage
+components/              brand components (unchanged), AppShell role nav
 pages/                   Landing, NotFound, Forbidden
 ```
-- Routes: `/` landing, `/login`, `/register`, `/worker/*`, `/pharmacy/*`, `/admin/*`; post-login redirect by role; unauthenticated -> `/login`; wrong role -> `/forbidden`.
-- UI follows `docs/BRAND.md` via `brand.*` tailwind tokens: navy headings, `brand-blue` primary buttons, `surface-muted` cards, azure accents only for large elements; logo from `/shiftstarter-logo.png`. Mobile-first responsive (works at 375px and desktop); form labels, focus rings and AA contrast.
-- Env: `VITE_API_URL=http://localhost:4000/api/v1`.
-- Server-side forms use client-side validation mirroring server rules (react-hook-form + zod).
+- Routing by capability: `/worker/*`, `/org/*`, `/admin/*`; post-login redirect by resolved role; unauth → `/login`; wrong role → `/forbidden`.
+- UI follows BRAND.md; mobile-first; clean/brand-forward direction carried into M3 listings.
+- Env: `VITE_API_URL`, `VITE_SUPABASE_URL`, `VITE_SUPABASE_ANON_KEY`.
 
 ## 7. New dependencies (approve in one go)
-**Server:** `jsonwebtoken`, `zod`, `cookie-parser`, `helmet`, `express-rate-limit`, `multer`, hashing lib per Decision 2 (`argon2` or `bcryptjs`), `file-type` (magic-byte check); dev: `@types/jsonwebtoken`, `@types/cookie-parser`, `@types/multer`. If S3 chosen: `@aws-sdk/client-s3` (+ presigner optional).
-**Client:** `react-router-dom`, `@tanstack/react-query`, `react-hook-form`, `zod`, `@hookform/resolvers`. (HTTP via native fetch, no axios.)
-No test framework added in M2 (QA is Playwright-driven by the qa-tester).
+**Server:** `@supabase/supabase-js`, `jose` (JWKS verify); keep `zod`, `helmet`, `express-rate-limit`, `multer`, `file-type`. **Remove:** `jsonwebtoken`, `@types/jsonwebtoken`, `argon2`/`bcryptjs`, `cookie-parser`, `@types/cookie-parser`.
+**Client:** `@supabase/supabase-js`; keep `react-router-dom`, `@tanstack/react-query`, `react-hook-form`, `zod`, `@hookform/resolvers`.
 
-## 8. Decisions requiring approval
-1. **Credential-document storage provider (open decision from DECISIONS.md).**
-   - A: Local disk behind a `StorageProvider` interface for dev/staging now; swap to S3-compatible in M5 deploy. Pros: zero cost/setup, unblocks M2. Cons: not durable on ephemeral hosts; must switch before production.
-   - B: S3-compatible from day one (AWS S3, Cloudflare R2, or MinIO locally in Docker). Pros: production-ready, private buckets with signed URLs. Cons: needs an account/keys now and client-borne cost.
-   - **Recommend A with the adapter interface, using R2/S3 in M5** (the interface keeps files private, served only via the authenticated endpoint). Record outcome as ADR-007.
-2. **Password hashing.** `argon2` (recommended, modern, memory-hard; native build, prebuilt binaries available) vs `bcryptjs` (pure JS, simpler deploys, slower, 72-byte limit). Recommend **argon2** (argon2id).
-3. **Client token storage.** (a) Access token in memory + refresh token in httpOnly, SameSite=Lax, Secure-in-prod cookie (recommended: XSS cannot read refresh token; session survives reload via `/auth/refresh`). (b) Both in localStorage (simple, but XSS-exposed). (c) Both as httpOnly cookies (needs CSRF protection; weaker for the future mobile app). Recommend **(a)**. Mobile later can use the same endpoints by also accepting refresh token in the body (support both: cookie preferred, body fallback).
-4. **Admin account creation.** No public admin registration. Recommend the seed script reading `ADMIN_EMAIL`/`ADMIN_PASSWORD` from `.env` (not committed).
-5. **Email verification and password reset** are not in M2 scope; they need an email provider (open decision for M4). Recommend deferring; users register as ACTIVE with `emailVerified=false`. Confirm that is acceptable.
-6. **Admin API breadth.** Plan includes the credential approve/reject and user suspend APIs now (small, makes the admin shell useful and enables the verification flow). Confirm, or restrict M2 to a read-only shell.
-7. **Credential migration** (adds fileName, mimeType, sizeBytes) as described in section 4.
-8. **Worker registration collects only name + email + password**; the rest is edited on the profile page. Confirm.
+## 8. Decisions requiring approval (carried to DECISIONS.md open list)
+1. **Super admin mechanism** — Supabase user + `app_metadata.platform_role=SUPER_ADMIN` claim mirrored to `Profile` (recommended) vs separate mechanism.
+2. **First-login provisioning** — Express `/auth/bootstrap` (recommended, explicit) vs Supabase DB trigger on `auth.users` insert.
+3. **Prisma under RLS** — Express as trusted tier with in-code scoping (recommended) vs claim propagation so Prisma runs under RLS.
+4. **Dependency swap** — approve add `@supabase/supabase-js` + `jose`; remove the custom-JWT/hashing/cookie deps.
+5. **Credential download** — stream through Express (recommended; full auth control, consistent with M1 "no public URLs") vs short-lived Supabase signed URL.
+6. **Reset migration history** — confirm it's acceptable to reset `prisma/migrations` to a new Supabase baseline (no production data exists yet).
 
-## 9. Testing strategy
-Pre-handoff (developer): `npm run lint`, `npm run typecheck`, `npm run build` in both apps; `npx prisma validate`; migration applied; seed admin works.
+## 9. User prerequisites (cannot be created by the build)
+- **Supabase project** (staging to start): `SUPABASE_URL`, anon key, **service-role key**, `DATABASE_URL` (pooled) + `DIRECT_URL`, JWKS URL. Set by hand in `server/.env` / `client/.env` (never committed).
+- Super-admin email/password (seed input). Stripe (M4) and Blackhawk (M3b) keys not needed for M2.
 
-### Acceptance criteria
-**Preconditions (M1 scaffold sanity, from qa/MILESTONE-1.md):**
-- [ ] `npx prisma validate` passes; `npm run typecheck` and `npm run build` pass for both apps.
-- [ ] `GET http://localhost:4000/health` returns `{ status: "ok" }`.
-- [ ] Client renders at http://localhost:5173 (now the landing page with brand styling).
-- Postgres container `pharmacy-postgres` running on 5433; admin seeded.
+## 10. Acceptance criteria
+**Setup**
+- [ ] `npx prisma validate` passes; `migrate dev` applies the baseline to Supabase; `typecheck`/`build` pass for both apps.
+- [ ] `GET /health` returns `{ status: "ok" }`.
+- [ ] RLS enabled on all business tables; a direct supabase-js read of another tenant's row returns nothing.
+- [ ] Super admin seeded (Profile + `app_metadata` claim); platform `RewardPolicy` seeded at 500 cents.
 
-**Auth**
-- [ ] Register as worker (name, email, password) -> lands on worker dashboard; same for pharmacy -> pharmacy dashboard.
-- [ ] Duplicate email shows an inline error; weak password / invalid email shows field errors.
-- [ ] Login with valid credentials lands on the role dashboard; invalid password shows a generic "Invalid email or password" and no redirect.
-- [ ] Reload the page while logged in -> still signed in (refresh cookie). Logout -> redirected to login; browser back/forward does not show protected pages; refresh no longer works.
-- [ ] Suspended user cannot log in.
-- [ ] Refresh rotation: old refresh token rejected after use (API check).
+**Auth & provisioning**
+- [ ] Sign up as a worker → Profile + WorkerProfile created → lands on worker dashboard; sign up as a pharmacy → Organization + owner Membership created → org dashboard.
+- [ ] Session persists across reload (Supabase session); sign-out clears it; password reset email flow works.
+- [ ] Express rejects a missing/invalid/expired token (401) and a wrong-role call (403) with `{error:{code,message}}`.
 
-**RBAC**
-- [ ] Unauthenticated visit to `/worker`, `/pharmacy`, `/admin` -> redirect to `/login`.
-- [ ] Worker visiting `/admin` or `/pharmacy` -> Forbidden page; pharmacy visiting `/worker` or `/admin` -> Forbidden.
-- [ ] API: worker token calling `/admin/users` or `/pharmacies/me/profile` returns 403 with `{error:{code,message}}`; no token returns 401.
-- [ ] Registering with `role: ADMIN` via API is rejected.
+**Multi-tenant RBAC**
+- [ ] Owner can edit org, invite a manager, add/edit/delete locations; manager can manage locations/shifts but not billing/members; worker hitting `/org` or `/admin` → Forbidden.
+- [ ] Org A cannot read or mutate Org B's locations (API 404/403 and RLS both block).
+- [ ] Super admin can list users/orgs across tenants and action the credential queue.
 
-**Worker**
-- [ ] Edit profile (title, license, experience, rate, address) -> save -> reload shows persisted values; invalid values (negative experience) rejected.
-- [ ] Upload a PDF credential with type -> appears with status PENDING; viewing/downloading works for owner; delete removes it.
-- [ ] Upload a .exe or a file over 10 MB is rejected with a clear message; a renamed non-PDF file with a pdf extension is rejected.
-- [ ] Worker cannot view another worker's credential file (API 403/404).
+**Worker & credentials**
+- [ ] Edit worker profile (role/license/rate/location) persists; invalid values rejected.
+- [ ] Upload a PDF credential to Supabase Storage → PENDING; owner can download; non-owner cannot (403/404); `.exe`/oversize/renamed-non-PDF rejected.
+- [ ] Super admin approves/rejects (with note); worker sees updated status.
 
-**Pharmacy**
-- [ ] Edit business profile and persist.
-- [ ] Add, edit, delete a location; list updates; one pharmacy cannot access another's location ids (404).
+**Chains & brand**
+- [ ] Super admin creates a chain with a logo; org selects it; it is returned by `GET /chains` and shown in the org profile.
+- [ ] At 375px nav collapses, forms usable, no horizontal scroll; brand palette + logo visible; focus rings present.
 
-**Admin**
-- [ ] Seeded admin logs in -> admin dashboard shell with sidebar nav (Users, Credentials).
-- [ ] Users page lists registered users, filter by role, suspend/reactivate a user.
-- [ ] Credential queue shows the worker's PENDING credential; approve and reject (with note) updates status, and the worker's credentials page reflects it.
+## 11. Testing strategy
+Pre-handoff (developer): `npm run lint`, `typecheck`, `build` both apps; `prisma validate`; migration applied to Supabase; seed works. QA via Playwright (ADR-006), unique emails per run, API checks with `curl` for 401/403 and cross-tenant isolation; super-admin creds from local `.env`.
 
-**Responsive/brand**
-- [ ] At 375px width: nav collapses to a menu, forms usable, no horizontal scroll; at 1280px full layout.
-- [ ] Brand navy/blue palette and logo visible; keyboard focus visible on form controls.
-
-### Notes for QA
-- Drive Playwright interactively (ADR-006); use unique emails per run (`qa+<timestamp>@example.com`).
-- Admin creds come from local `server/.env` seed values (ask the developer; do not commit).
-- Uploaded files land in `server/uploads/` (gitignored); clean between runs if needed.
-- Use `curl` for the API-only checks (403/401, refresh reuse, ADMIN role registration).
-- Ports: client 5173, server 4000, DB 5433.
-
-## 10. Risks and dependencies
-- Depends on M1 (done) and local Postgres container running; `server/.env` must exist (tool cannot write it; created by hand) and gain new vars (`JWT_ACCESS_EXPIRES`, `REFRESH_TTL_DAYS`, `UPLOAD_DIR`, `ADMIN_EMAIL`, `ADMIN_PASSWORD`). `.env.example` updated.
-- Cross-origin cookies: client (5173) and server (4000) are different origins; requires `credentials: true` on CORS and fetch, SameSite=Lax works on localhost (same site). In production use same-site subdomains (e.g. app. and api. on shiftstarter.ca) -- flag for M5.
-- Local-disk storage is not durable; must switch before production (tracked in M5).
-- Credential documents are sensitive (PII): private access only, no public URLs, no logging of contents.
-- `argon2` native build can fail on some deploy targets (fallback bcryptjs).
-- Scope creep risk: admin APIs and availability; availability explicitly deferred to M3.
-- Staff-facing legal items (privacy policy/consent for ID documents) not addressed; flag to client.
+## 12. Risks & dependencies
+- Depends on M1 (done) + a provisioned Supabase project (user prerequisite; cannot be created by the build).
+- RLS + privileged Prisma connection: the biggest correctness risk is a service-layer query that forgets tenant scoping; mitigated by a shared org-scoping helper and cross-tenant QA checks.
+- JWKS verification must cache keys and handle Supabase key rotation.
+- Resetting migration history is safe only because no production data exists yet (confirm — decision 6).
+- Credential documents are sensitive PII: private bucket, authenticated access only, no logging of contents.
+- Scope/commercial: this rebuild is larger than the original M2 estimate (see MILESTONES.md commercial note).

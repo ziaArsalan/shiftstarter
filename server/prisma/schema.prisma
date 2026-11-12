@@ -1,6 +1,23 @@
-// Pharmacy Staffing Marketplace — data model (M1 deliverable).
-// Source of truth for the PostgreSQL schema. Migrations are generated in M2
-// when a database is connected (`npx prisma migrate dev`).
+// ShiftStarter — data model (revised 2026-11-12 after the client call).
+// Source of truth for the PostgreSQL schema that now runs on SUPABASE.
+//
+// MIGRATION NOTE (M2 rebuild): the existing migrations under
+// prisma/migrations/ were generated against the local raw-Postgres checkpoint
+// (custom JWT auth, 3-role model). They are SUPERSEDED. In the M2 rebuild the
+// migration history is reset and REGENERATED against the Supabase-managed
+// Postgres connection string (`npx prisma migrate dev` against Supabase).
+// Do NOT run prisma as part of this architecture pass — schema only.
+//
+// IDENTITY NOTE: Supabase Auth owns the canonical user record in the
+// `auth.users` schema. `Profile.id` is the Supabase auth user UUID (the value
+// of `auth.uid()`), so RLS policies can match rows to the JWT subject. Prisma
+// manages only the `public` schema; it never writes `auth.users`.
+//
+// RLS NOTE: Row-Level Security policies are authored as SQL (tracked in
+// supabase/policies, applied via migrations) and are the authoritative guard
+// for any direct `@supabase/supabase-js` access from the client. The Express
+// API connects with a privileged role and additionally enforces tenant
+// scoping in its services. See docs/ARCHITECTURE.md §Auth & RLS.
 
 generator client {
   provider = "prisma-client-js"
@@ -8,21 +25,54 @@ generator client {
 
 datasource db {
   provider = "postgresql"
-  url      = env("DATABASE_URL")
+  url      = env("DATABASE_URL")       // Supabase pooled connection (pgbouncer)
+  directUrl = env("DIRECT_URL")        // Supabase direct connection for migrations
 }
 
-// ---------- Enums ----------
+// ======================================================================
+// Enums
+// ======================================================================
 
-enum Role {
-  WORKER
+// Platform-level role. Super admin is simply a Profile carrying this claim
+// (mirrored into the Supabase JWT via app_metadata). Everyone else is USER;
+// what a USER may do is determined by their WorkerProfile and/or Memberships.
+enum PlatformRole {
+  USER
+  SUPER_ADMIN
+}
+
+// Role of a Profile WITHIN an Organization (pharmacy tenant).
+enum OrgRole {
+  OWNER
+  MANAGER
+}
+
+// Profession of an individual supply-side worker.
+enum WorkerRole {
+  PHARMACIST
+  PHARMACY_TECHNICIAN
+  PHARMACY_ASSISTANT
+  PHARMACY_STUDENT
+}
+
+// Tenant kind. Only PHARMACY is used now; AGENCY is reserved so the model can
+// later support staffing agencies without a migration (see open decision —
+// "workers belonging to agencies"). Not built now.
+enum OrganizationType {
   PHARMACY
-  ADMIN
+  AGENCY
 }
 
 enum UserStatus {
   ACTIVE
   SUSPENDED
   PENDING
+}
+
+enum MembershipStatus {
+  ACTIVE
+  INVITED
+  REMOVED
 }
 
 enum CredentialType {
@@ -88,73 +138,147 @@ enum DisputeStatus {
   REJECTED
 }
 
-// ---------- Identity ----------
+// ----- Rewards (DESIGN NOW, BUILD IN M3) -----
 
-model User {
-  id            String     @id @default(cuid())
-  email         String     @unique
-  passwordHash  String
-  role          Role
-  status        UserStatus @default(ACTIVE)
-  emailVerified Boolean    @default(false)
-  createdAt     DateTime   @default(now())
-  updatedAt     DateTime   @updatedAt
+enum RewardTransactionType {
+  EARN   // credited when a Booking reaches COMPLETED
+  REDEEM // debited when the worker converts balance to a gift card
+  ADJUST // manual correction by SUPER_ADMIN (+/-)
+}
+
+enum RewardRedemptionStatus {
+  PENDING   // created, not yet sent to provider
+  REQUESTED // card requested from the gift-card provider
+  FULFILLED // provider issued the card (external refs stored)
+  FAILED    // provider rejected / errored (balance to be restored)
+  CANCELLED // worker/admin cancelled before fulfilment
+}
+
+enum RewardProvider {
+  BLACKHAWK
+}
+
+// ======================================================================
+// Identity & tenancy
+// ======================================================================
+
+// One row per Supabase auth user. `id` MUST equal the Supabase auth UUID.
+// A Profile may be a worker (has workerProfile), an org member (has
+// memberships), or a super admin (platformRole = SUPER_ADMIN). These are not
+// mutually exclusive — a pharmacy owner could also pick up shifts.
+model Profile {
+  id            String       @id @db.Uuid // = auth.users.id (auth.uid())
+  email         String       @unique
+  fullName      String?
+  phone         String?
+  avatarUrl     String?
+  platformRole  PlatformRole @default(USER)
+  status        UserStatus   @default(ACTIVE)
+  createdAt     DateTime     @default(now())
+  updatedAt     DateTime     @updatedAt
 
   workerProfile   WorkerProfile?
-  pharmacyProfile PharmacyProfile?
-  refreshTokens   RefreshToken[]
+  memberships     Membership[]
   notifications   Notification[]
-  sentMessages    Message[]        @relation("MessageSender")
-  reviewsAuthored Review[]         @relation("ReviewAuthor")
-  reviewsReceived Review[]         @relation("ReviewTarget")
-  disputesRaised  Dispute[]        @relation("DisputeRaisedBy")
+  sentMessages    Message[]      @relation("MessageSender")
+  reviewsAuthored Review[]       @relation("ReviewAuthor")
+  reviewsReceived Review[]       @relation("ReviewTarget")
+  disputesRaised  Dispute[]      @relation("DisputeRaisedBy")
 
-  @@index([role])
+  @@index([platformRole])
 }
 
-model RefreshToken {
+// A pharmacy tenant. All pharmacy-side data (locations, shifts, applications,
+// bookings, staff) is scoped to an Organization and isolated per-tenant by RLS
+// (via Membership) and by Express service-layer scoping.
+model Organization {
+  id        String           @id @default(cuid())
+  type      OrganizationType @default(PHARMACY)
+  name      String
+  chainId   String?          // optional brand/chain; null = independent pharmacy
+  description String?
+  contactPhone String?
+  website   String?
+  status    UserStatus       @default(ACTIVE)
+  createdAt DateTime         @default(now())
+  updatedAt DateTime         @updatedAt
+
+  chain       PharmacyChain?     @relation(fields: [chainId], references: [id])
+  memberships Membership[]
+  locations   PharmacyLocation[]
+  shifts      Shift[]
+  rewardPolicy RewardPolicy?
+
+  @@index([chainId])
+}
+
+// Join between a Profile and an Organization with an org-scoped role.
+model Membership {
+  id             String           @id @default(cuid())
+  organizationId String
+  profileId      String           @db.Uuid
+  role           OrgRole          @default(MANAGER)
+  status         MembershipStatus @default(ACTIVE)
+  invitedEmail   String?          // for pending invites before the user signs up
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  organization Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  profile      Profile      @relation(fields: [profileId], references: [id], onDelete: Cascade)
+
+  @@unique([organizationId, profileId])
+  @@index([profileId])
+  @@index([organizationId])
+}
+
+// Platform-curated catalog of pharmacy chains/brands (name + logo). Managed by
+// SUPER_ADMIN, readable by all authenticated users. Organizations and
+// locations reference a chain so shift listings can render the chain logo.
+// Independent pharmacies simply leave the reference null.
+model PharmacyChain {
   id        String   @id @default(cuid())
-  userId    String
-  tokenHash String   @unique
-  expiresAt DateTime
-  revokedAt DateTime?
+  name      String   @unique
+  slug      String   @unique
+  logoUrl   String?  // Supabase Storage key or public brand-asset URL
+  website   String?
   createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
-
-  @@index([userId])
+  organizations Organization[]
+  locations     PharmacyLocation[]
 }
 
-// ---------- Worker side ----------
+// ======================================================================
+// Worker side
+// ======================================================================
 
 model WorkerProfile {
-  id               String   @id @default(cuid())
-  userId           String   @unique
-  firstName        String
-  lastName         String
-  phone            String?
-  professionalTitle String? // e.g. Pharmacist, Pharmacy Technician
-  licenseNumber    String?
-  yearsExperience  Int?
-  bio              String?
-  hourlyRateExpectation Decimal? @db.Decimal(10, 2)
+  id                    String      @id @default(cuid())
+  profileId             String      @unique @db.Uuid
+  workerRole            WorkerRole
+  licenseNumber         String?
+  yearsExperience       Int?
+  bio                   String?
+  hourlyRateExpectation Decimal?    @db.Decimal(10, 2)
   // Location
-  addressLine1     String?
-  city             String?
-  state            String?
-  postalCode       String?
-  country          String?
-  latitude         Float?
-  longitude        Float?
-  createdAt        DateTime @default(now())
-  updatedAt        DateTime @updatedAt
+  addressLine1 String?
+  city         String?
+  state        String?
+  postalCode   String?
+  country      String?
+  latitude     Float?
+  longitude    Float?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
 
-  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
-  credentials  Credential[]
-  availability Availability[]
-  applications Application[]
-  bookings     Booking[]
+  profile       Profile        @relation(fields: [profileId], references: [id], onDelete: Cascade)
+  credentials   Credential[]
+  availability  Availability[]
+  applications  Application[]
+  bookings      Booking[]
+  rewardAccount RewardAccount?
 
+  @@index([workerRole])
   @@index([city, state])
 }
 
@@ -169,7 +293,7 @@ model Credential {
   status     VerificationStatus @default(PENDING)
   issuedAt   DateTime?
   expiresAt  DateTime?
-  reviewedBy String? // admin User.id
+  reviewedBy String?            @db.Uuid // SUPER_ADMIN Profile.id
   reviewedAt DateTime?
   notes      String?
   createdAt  DateTime           @default(now())
@@ -192,70 +316,58 @@ model Availability {
   @@index([workerId])
 }
 
-// ---------- Pharmacy side ----------
-
-model PharmacyProfile {
-  id           String   @id @default(cuid())
-  userId       String   @unique
-  businessName String
-  description  String?
-  contactPhone String?
-  website      String?
-  createdAt    DateTime @default(now())
-  updatedAt    DateTime @updatedAt
-
-  user      User               @relation(fields: [userId], references: [id], onDelete: Cascade)
-  locations PharmacyLocation[]
-  shifts    Shift[]
-}
+// ======================================================================
+// Pharmacy locations & marketplace
+// ======================================================================
 
 model PharmacyLocation {
-  id           String   @id @default(cuid())
-  pharmacyId   String
-  name         String
-  addressLine1 String
-  addressLine2 String?
-  city         String
-  state        String
-  postalCode   String
-  country      String
-  latitude     Float?
-  longitude    Float?
-  createdAt    DateTime @default(now())
+  id             String   @id @default(cuid())
+  organizationId String
+  chainId        String?  // optional per-location brand override (else inherits org.chain)
+  name           String
+  addressLine1   String
+  addressLine2   String?
+  city           String
+  state          String
+  postalCode     String
+  country        String
+  latitude       Float?
+  longitude      Float?
+  createdAt      DateTime @default(now())
 
-  pharmacy PharmacyProfile @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
-  shifts   Shift[]
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  chain        PharmacyChain? @relation(fields: [chainId], references: [id])
+  shifts       Shift[]
 
-  @@index([pharmacyId])
+  @@index([organizationId])
+  @@index([chainId])
   @@index([city, state])
 }
 
-// ---------- Marketplace ----------
-
 model Shift {
-  id                  String      @id @default(cuid())
-  pharmacyId          String
+  id                  String           @id @default(cuid())
+  organizationId      String
   locationId          String
   title               String
   description         String?
-  roleRequired        String // e.g. Pharmacist, Technician
+  roleRequired        WorkerRole
   startAt             DateTime
   endAt               DateTime
-  hourlyRate          Decimal     @db.Decimal(10, 2)
-  slots               Int         @default(1)
+  hourlyRate          Decimal          @db.Decimal(10, 2)
+  slots               Int              @default(1)
   requiredCredentials CredentialType[]
-  status              ShiftStatus @default(DRAFT)
-  createdAt           DateTime    @default(now())
-  updatedAt           DateTime    @updatedAt
+  status              ShiftStatus      @default(DRAFT)
+  createdAt           DateTime         @default(now())
+  updatedAt           DateTime         @updatedAt
 
-  pharmacy     PharmacyProfile  @relation(fields: [pharmacyId], references: [id], onDelete: Cascade)
+  organization Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   location     PharmacyLocation @relation(fields: [locationId], references: [id])
   applications Application[]
   booking      Booking?
 
   @@index([status])
   @@index([startAt])
-  @@index([pharmacyId])
+  @@index([organizationId])
 }
 
 model Application {
@@ -264,6 +376,9 @@ model Application {
   workerId  String
   status    ApplicationStatus @default(PENDING)
   coverNote String?
+  // Negotiation fields (counter-rate / extra compensation) surfaced by the
+  // competitor review in the client call. Refined in M3.
+  proposedRate Decimal?       @db.Decimal(10, 2)
   appliedAt DateTime          @default(now())
   decidedAt DateTime?
 
@@ -287,49 +402,54 @@ model Booking {
   completedAt   DateTime?
   cancelledAt   DateTime?
 
-  shift        Shift         @relation(fields: [shiftId], references: [id])
-  worker       WorkerProfile @relation(fields: [workerId], references: [id])
-  application  Application   @relation(fields: [applicationId], references: [id])
-  payments     Payment[]
-  reviews      Review[]
-  dispute      Dispute?
-  conversation Conversation?
+  shift            Shift              @relation(fields: [shiftId], references: [id])
+  worker           WorkerProfile      @relation(fields: [workerId], references: [id])
+  application      Application        @relation(fields: [applicationId], references: [id])
+  payments         Payment[]
+  reviews          Review[]
+  dispute          Dispute?
+  conversation     Conversation?
+  rewardTransaction RewardTransaction? // the EARN created when status -> COMPLETED
 
   @@index([workerId])
   @@index([status])
 }
 
-// ---------- Messaging ----------
+// ======================================================================
+// Messaging
+// ======================================================================
 
 model Conversation {
-  id         String    @id @default(cuid())
-  bookingId  String?   @unique
-  createdAt  DateTime  @default(now())
-  updatedAt  DateTime  @updatedAt
+  id        String   @id @default(cuid())
+  bookingId String?  @unique
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 
   booking  Booking?  @relation(fields: [bookingId], references: [id])
   messages Message[]
 }
 
 model Message {
-  id             String   @id @default(cuid())
+  id             String    @id @default(cuid())
   conversationId String
-  senderId       String
+  senderId       String    @db.Uuid
   body           String
   readAt         DateTime?
-  createdAt      DateTime @default(now())
+  createdAt      DateTime  @default(now())
 
   conversation Conversation @relation(fields: [conversationId], references: [id], onDelete: Cascade)
-  sender       User         @relation("MessageSender", fields: [senderId], references: [id])
+  sender       Profile      @relation("MessageSender", fields: [senderId], references: [id])
 
   @@index([conversationId])
 }
 
-// ---------- Notifications ----------
+// ======================================================================
+// Notifications
+// ======================================================================
 
 model Notification {
   id        String              @id @default(cuid())
-  userId    String
+  userId    String              @db.Uuid
   type      String
   title     String
   body      String?
@@ -338,22 +458,24 @@ model Notification {
   data      Json?
   createdAt DateTime            @default(now())
 
-  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  user Profile @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId])
 }
 
-// ---------- Payments ----------
+// ======================================================================
+// Payments
+// ======================================================================
 
 model Payment {
   id                    String        @id @default(cuid())
   bookingId             String
-  payerUserId           String
-  payeeUserId           String
+  payerUserId           String        @db.Uuid
+  payeeUserId           String        @db.Uuid
   type                  PaymentType
   status                PaymentStatus @default(PENDING)
   amountCents           Int
-  currency              String        @default("usd")
+  currency              String        @default("cad")
   stripePaymentIntentId String?
   stripeTransferId      String?
   createdAt             DateTime      @default(now())
@@ -365,31 +487,36 @@ model Payment {
   @@index([status])
 }
 
-// ---------- Reviews ----------
+// ======================================================================
+// Reviews & disputes
+// ======================================================================
 
+// A post-booking review. The author is always a Profile. The subject is either
+// a worker (targetUserId) or the hiring organization (targetOrganizationId) —
+// exactly one is set. Shape finalises in M4.
 model Review {
-  id           String   @id @default(cuid())
-  bookingId    String
-  authorUserId String
-  targetUserId String
-  rating       Int // 1..5
-  comment      String?
-  createdAt    DateTime @default(now())
+  id                   String   @id @default(cuid())
+  bookingId            String
+  authorUserId         String   @db.Uuid
+  targetUserId         String?  @db.Uuid
+  targetOrganizationId String?
+  rating               Int // 1..5
+  comment              String?
+  createdAt            DateTime @default(now())
 
-  booking Booking @relation(fields: [bookingId], references: [id], onDelete: Cascade)
-  author  User    @relation("ReviewAuthor", fields: [authorUserId], references: [id])
-  target  User    @relation("ReviewTarget", fields: [targetUserId], references: [id])
+  booking Booking  @relation(fields: [bookingId], references: [id], onDelete: Cascade)
+  author  Profile  @relation("ReviewAuthor", fields: [authorUserId], references: [id])
+  target  Profile? @relation("ReviewTarget", fields: [targetUserId], references: [id])
 
   @@unique([bookingId, authorUserId])
   @@index([targetUserId])
+  @@index([targetOrganizationId])
 }
-
-// ---------- Disputes ----------
 
 model Dispute {
   id             String        @id @default(cuid())
   bookingId      String        @unique
-  raisedByUserId String
+  raisedByUserId String        @db.Uuid
   reason         String
   description    String?
   status         DisputeStatus @default(OPEN)
@@ -398,7 +525,93 @@ model Dispute {
   resolvedAt     DateTime?
 
   booking  Booking @relation(fields: [bookingId], references: [id])
-  raisedBy User    @relation("DisputeRaisedBy", fields: [raisedByUserId], references: [id])
+  raisedBy Profile @relation("DisputeRaisedBy", fields: [raisedByUserId], references: [id])
 
   @@index([status])
+}
+
+// ======================================================================
+// Rewards (DESIGN NOW — built in M3). "Worker earns a configurable reward
+// (default $5) when a booking reaches COMPLETED; balance is redeemable for a
+// gift card via the Blackhawk developer API." See docs/ARCHITECTURE.md §Rewards.
+// ======================================================================
+
+// One ledger account per worker. `balanceCents` is a cached running total kept
+// consistent with the sum of its transactions (updated transactionally).
+model RewardAccount {
+  id          String   @id @default(cuid())
+  workerId    String   @unique
+  balanceCents Int     @default(0)
+  currency    String   @default("cad")
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  worker       WorkerProfile       @relation(fields: [workerId], references: [id], onDelete: Cascade)
+  transactions RewardTransaction[]
+  redemptions  RewardRedemption[]
+
+  @@index([workerId])
+}
+
+// Immutable ledger entry. EARN is tied to the Booking that generated it; the
+// unique bookingId guarantees a booking can be earned-on at most once
+// (idempotent EARN). REDEEM entries link to a RewardRedemption. amountCents is
+// signed: EARN positive, REDEEM negative, ADJUST either.
+model RewardTransaction {
+  id          String                @id @default(cuid())
+  accountId   String
+  type        RewardTransactionType
+  amountCents Int
+  bookingId   String?               @unique // set for EARN (idempotency guard)
+  redemptionId String?              @unique // set for REDEEM
+  note        String?
+  createdBy   String?               @db.Uuid // SUPER_ADMIN for ADJUST
+  createdAt   DateTime              @default(now())
+
+  account    RewardAccount     @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  booking    Booking?          @relation(fields: [bookingId], references: [id])
+  redemption RewardRedemption? @relation(fields: [redemptionId], references: [id])
+
+  @@index([accountId])
+  @@index([type])
+}
+
+// A request to convert reward balance into a gift card via the provider.
+// External provider identifiers are stored for reconciliation/status tracking.
+model RewardRedemption {
+  id            String                 @id @default(cuid())
+  accountId     String
+  amountCents   Int
+  provider      RewardProvider         @default(BLACKHAWK)
+  status        RewardRedemptionStatus @default(PENDING)
+  giftCardBrand String?                // chosen catalog brand, if applicable
+  externalOrderId String?              // provider order/request id
+  externalCardRef String?              // provider card/account reference
+  failureReason String?
+  requestedAt   DateTime?
+  fulfilledAt   DateTime?
+  createdAt     DateTime               @default(now())
+  updatedAt     DateTime               @updatedAt
+
+  account     RewardAccount      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  transaction RewardTransaction?
+
+  @@index([accountId])
+  @@index([status])
+}
+
+// Configurable reward rules. A null organizationId row is the PLATFORM default
+// (seeded at 500 cents = $5). An org-scoped row (future) overrides it. Eligible
+// booking statuses are enforced in code (COMPLETED earns; CANCELLED/NO_SHOW do
+// not) — see open decision on eligibility rules.
+model RewardPolicy {
+  id             String   @id @default(cuid())
+  organizationId String?  @unique // null = platform default
+  earnAmountCents Int     @default(500)
+  currency       String   @default("cad")
+  active         Boolean  @default(true)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+
+  organization Organization? @relation(fields: [organizationId], references: [id], onDelete: Cascade)
 }
