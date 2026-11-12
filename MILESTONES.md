@@ -21,7 +21,7 @@ Billing/scope map to the quotation ($2,200 total).
 ## M2 — Core Platform & User Roles
 - **Priority:** P0
 - **Depends on:** M1
-- **Status:** pending
+- **Status:** in_progress — v1 (custom JWT auth, 3-role) committed as a **checkpoint** on 2026-11-12. **Rebuilding** on Supabase (Auth + RLS + SDK) with the new multi-tenant SaaS role model per the 2026-11-12 client call. See DECISIONS.md and the revised plan.
 - **Amount:** $550
 - **Goal:** Auth + roles + profiles + credentials foundation.
 - **Scope:** JWT auth + RBAC (worker / pharmacy / admin); registration & login; worker profiles; pharmacy profiles + locations; credential/document upload (storage wiring); base admin dashboard shell; responsive web shell; core API + DB migrations live.

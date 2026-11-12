@@ -1,22 +1,41 @@
 import express, { type Express } from "express";
 import cors from "cors";
+import helmet from "helmet";
+import cookieParser from "cookie-parser";
+import { env } from "./config/env.js";
+import { AppError, errorHandler } from "./lib/errors.js";
+import { apiRouter } from "./routes/index.js";
 
 /**
- * Builds the Express app. Feature routes under /api/v1 are added in M2+.
- * See docs/ARCHITECTURE.md §6 for the planned API surface.
+ * Builds the Express app. Feature routes live under /api/v1.
+ * See docs/ARCHITECTURE.md §6 for the API surface.
  */
 export function createApp(): Express {
   const app = express();
 
-  app.use(cors({ origin: process.env.CLIENT_ORIGIN ?? "http://localhost:5173" }));
-  app.use(express.json());
+  app.use(helmet());
+  app.use(
+    cors({
+      origin: env.CLIENT_ORIGIN,
+      credentials: true,
+    }),
+  );
+  app.use(express.json({ limit: "1mb" }));
+  app.use(cookieParser());
 
-  // Health check — the only endpoint in the M1 scaffold.
+  // Health check — unchanged from the M1 scaffold.
   app.get("/health", (_req, res) => {
     res.json({ status: "ok", service: "pharmacy-marketplace-api", version: "0.1.0" });
   });
 
-  // app.use("/api/v1", apiRouter); // wired in M2
+  app.use("/api/v1", apiRouter);
+
+  // Unknown route under the API -> 404 in the standard error shape.
+  app.use((_req, _res, next) => {
+    next(AppError.notFound("Route not found"));
+  });
+
+  app.use(errorHandler);
 
   return app;
 }

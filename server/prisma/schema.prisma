@@ -162,7 +162,10 @@ model Credential {
   id         String             @id @default(cuid())
   workerId   String
   type       CredentialType
-  fileUrl    String
+  fileUrl    String // storage key within the configured StorageProvider (not a public URL)
+  fileName   String // sanitised original filename, for display/download
+  mimeType   String // validated content type (pdf/jpeg/png)
+  sizeBytes  Int // stored file size in bytes
   status     VerificationStatus @default(PENDING)
   issuedAt   DateTime?
   expiresAt  DateTime?

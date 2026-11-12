@@ -1,19 +1,21 @@
-// Flat ESLint config (ESLint 9). Minimal baseline; expanded as the client grows.
+// Flat ESLint config (ESLint 9) with TypeScript + JSX support.
 import js from "@eslint/js";
+import tseslint from "typescript-eslint";
 
 export default [
   js.configs.recommended,
+  ...tseslint.configs.recommended,
   {
     files: ["src/**/*.{ts,tsx}"],
     languageOptions: {
-      ecmaVersion: 2022,
-      sourceType: "module",
-      parserOptions: {
-        ecmaFeatures: { jsx: true },
-      },
+      parserOptions: { ecmaFeatures: { jsx: true } },
     },
     rules: {
-      "no-unused-vars": "warn",
+      // TypeScript handles undefined identifiers; disable the core rule so
+      // browser globals (window, document, fetch) don't trip it.
+      "no-undef": "off",
+      "no-unused-vars": "off",
+      "@typescript-eslint/no-unused-vars": ["warn", { argsIgnorePattern: "^_", varsIgnorePattern: "^_" }],
     },
   },
   {

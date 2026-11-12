@@ -22,6 +22,9 @@ server/dist/
 # Prisma
 server/prisma/migrations/dev.db*
 
+# Uploaded credential documents (local storage provider)
+server/uploads/
+
 # Logs
 *.log
 npm-debug.log*
@@ -38,6 +41,10 @@ Thumbs.db
 coverage/
 playwright-report/
 test-results/
+
+# Sensitive meeting material / internal notes (keep out of git)
+*-transcript.txt
+*transcript*.txt
 
 # Misc
 *.local
