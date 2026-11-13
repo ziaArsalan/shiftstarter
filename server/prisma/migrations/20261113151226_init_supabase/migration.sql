@@ -1,8 +1,20 @@
 -- CreateEnum
-CREATE TYPE "Role" AS ENUM ('WORKER', 'PHARMACY', 'ADMIN');
+CREATE TYPE "PlatformRole" AS ENUM ('USER', 'SUPER_ADMIN');
+
+-- CreateEnum
+CREATE TYPE "OrgRole" AS ENUM ('OWNER', 'MANAGER');
+
+-- CreateEnum
+CREATE TYPE "WorkerRole" AS ENUM ('PHARMACIST', 'PHARMACY_TECHNICIAN', 'PHARMACY_ASSISTANT', 'PHARMACY_STUDENT');
+
+-- CreateEnum
+CREATE TYPE "OrganizationType" AS ENUM ('PHARMACY', 'AGENCY');
 
 -- CreateEnum
 CREATE TYPE "UserStatus" AS ENUM ('ACTIVE', 'SUSPENDED', 'PENDING');
+
+-- CreateEnum
+CREATE TYPE "MembershipStatus" AS ENUM ('ACTIVE', 'INVITED', 'REMOVED');
 
 -- CreateEnum
 CREATE TYPE "CredentialType" AS ENUM ('LICENSE', 'GOVERNMENT_ID', 'CERTIFICATION', 'INSURANCE', 'OTHER');
@@ -31,40 +43,78 @@ CREATE TYPE "NotificationChannel" AS ENUM ('IN_APP', 'EMAIL', 'PUSH');
 -- CreateEnum
 CREATE TYPE "DisputeStatus" AS ENUM ('OPEN', 'UNDER_REVIEW', 'RESOLVED', 'REJECTED');
 
+-- CreateEnum
+CREATE TYPE "RewardTransactionType" AS ENUM ('EARN', 'REDEEM', 'ADJUST');
+
+-- CreateEnum
+CREATE TYPE "RewardRedemptionStatus" AS ENUM ('PENDING', 'REQUESTED', 'FULFILLED', 'FAILED', 'CANCELLED');
+
+-- CreateEnum
+CREATE TYPE "RewardProvider" AS ENUM ('BLACKHAWK');
+
 -- CreateTable
-CREATE TABLE "User" (
-    "id" TEXT NOT NULL,
+CREATE TABLE "Profile" (
+    "id" UUID NOT NULL,
     "email" TEXT NOT NULL,
-    "passwordHash" TEXT NOT NULL,
-    "role" "Role" NOT NULL,
+    "fullName" TEXT,
+    "phone" TEXT,
+    "avatarUrl" TEXT,
+    "platformRole" "PlatformRole" NOT NULL DEFAULT 'USER',
     "status" "UserStatus" NOT NULL DEFAULT 'ACTIVE',
-    "emailVerified" BOOLEAN NOT NULL DEFAULT false,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "User_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Profile_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
-CREATE TABLE "RefreshToken" (
+CREATE TABLE "Organization" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "tokenHash" TEXT NOT NULL,
-    "expiresAt" TIMESTAMP(3) NOT NULL,
-    "revokedAt" TIMESTAMP(3),
+    "type" "OrganizationType" NOT NULL DEFAULT 'PHARMACY',
+    "name" TEXT NOT NULL,
+    "chainId" TEXT,
+    "description" TEXT,
+    "contactPhone" TEXT,
+    "website" TEXT,
+    "status" "UserStatus" NOT NULL DEFAULT 'ACTIVE',
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
 
-    CONSTRAINT "RefreshToken_pkey" PRIMARY KEY ("id")
+    CONSTRAINT "Organization_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "Membership" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "profileId" UUID NOT NULL,
+    "role" "OrgRole" NOT NULL DEFAULT 'MANAGER',
+    "status" "MembershipStatus" NOT NULL DEFAULT 'ACTIVE',
+    "invitedEmail" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "Membership_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "PharmacyChain" (
+    "id" TEXT NOT NULL,
+    "name" TEXT NOT NULL,
+    "slug" TEXT NOT NULL,
+    "logoUrl" TEXT,
+    "website" TEXT,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "PharmacyChain_pkey" PRIMARY KEY ("id")
 );
 
 -- CreateTable
 CREATE TABLE "WorkerProfile" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "firstName" TEXT NOT NULL,
-    "lastName" TEXT NOT NULL,
-    "phone" TEXT,
-    "professionalTitle" TEXT,
+    "profileId" UUID NOT NULL,
+    "workerRole" "WorkerRole" NOT NULL,
     "licenseNumber" TEXT,
     "yearsExperience" INTEGER,
     "bio" TEXT,
@@ -88,10 +138,13 @@ CREATE TABLE "Credential" (
     "workerId" TEXT NOT NULL,
     "type" "CredentialType" NOT NULL,
     "fileUrl" TEXT NOT NULL,
+    "fileName" TEXT NOT NULL,
+    "mimeType" TEXT NOT NULL,
+    "sizeBytes" INTEGER NOT NULL,
     "status" "VerificationStatus" NOT NULL DEFAULT 'PENDING',
     "issuedAt" TIMESTAMP(3),
     "expiresAt" TIMESTAMP(3),
-    "reviewedBy" TEXT,
+    "reviewedBy" UUID,
     "reviewedAt" TIMESTAMP(3),
     "notes" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -111,23 +164,10 @@ CREATE TABLE "Availability" (
 );
 
 -- CreateTable
-CREATE TABLE "PharmacyProfile" (
-    "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
-    "businessName" TEXT NOT NULL,
-    "description" TEXT,
-    "contactPhone" TEXT,
-    "website" TEXT,
-    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
-    "updatedAt" TIMESTAMP(3) NOT NULL,
-
-    CONSTRAINT "PharmacyProfile_pkey" PRIMARY KEY ("id")
-);
-
--- CreateTable
 CREATE TABLE "PharmacyLocation" (
     "id" TEXT NOT NULL,
-    "pharmacyId" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
+    "chainId" TEXT,
     "name" TEXT NOT NULL,
     "addressLine1" TEXT NOT NULL,
     "addressLine2" TEXT,
@@ -145,11 +185,11 @@ CREATE TABLE "PharmacyLocation" (
 -- CreateTable
 CREATE TABLE "Shift" (
     "id" TEXT NOT NULL,
-    "pharmacyId" TEXT NOT NULL,
+    "organizationId" TEXT NOT NULL,
     "locationId" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "description" TEXT,
-    "roleRequired" TEXT NOT NULL,
+    "roleRequired" "WorkerRole" NOT NULL,
     "startAt" TIMESTAMP(3) NOT NULL,
     "endAt" TIMESTAMP(3) NOT NULL,
     "hourlyRate" DECIMAL(10,2) NOT NULL,
@@ -169,6 +209,7 @@ CREATE TABLE "Application" (
     "workerId" TEXT NOT NULL,
     "status" "ApplicationStatus" NOT NULL DEFAULT 'PENDING',
     "coverNote" TEXT,
+    "proposedRate" DECIMAL(10,2),
     "appliedAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
     "decidedAt" TIMESTAMP(3),
 
@@ -204,7 +245,7 @@ CREATE TABLE "Conversation" (
 CREATE TABLE "Message" (
     "id" TEXT NOT NULL,
     "conversationId" TEXT NOT NULL,
-    "senderId" TEXT NOT NULL,
+    "senderId" UUID NOT NULL,
     "body" TEXT NOT NULL,
     "readAt" TIMESTAMP(3),
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -215,7 +256,7 @@ CREATE TABLE "Message" (
 -- CreateTable
 CREATE TABLE "Notification" (
     "id" TEXT NOT NULL,
-    "userId" TEXT NOT NULL,
+    "userId" UUID NOT NULL,
     "type" TEXT NOT NULL,
     "title" TEXT NOT NULL,
     "body" TEXT,
@@ -231,12 +272,12 @@ CREATE TABLE "Notification" (
 CREATE TABLE "Payment" (
     "id" TEXT NOT NULL,
     "bookingId" TEXT NOT NULL,
-    "payerUserId" TEXT NOT NULL,
-    "payeeUserId" TEXT NOT NULL,
+    "payerUserId" UUID NOT NULL,
+    "payeeUserId" UUID NOT NULL,
     "type" "PaymentType" NOT NULL,
     "status" "PaymentStatus" NOT NULL DEFAULT 'PENDING',
     "amountCents" INTEGER NOT NULL,
-    "currency" TEXT NOT NULL DEFAULT 'usd',
+    "currency" TEXT NOT NULL DEFAULT 'cad',
     "stripePaymentIntentId" TEXT,
     "stripeTransferId" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -249,8 +290,9 @@ CREATE TABLE "Payment" (
 CREATE TABLE "Review" (
     "id" TEXT NOT NULL,
     "bookingId" TEXT NOT NULL,
-    "authorUserId" TEXT NOT NULL,
-    "targetUserId" TEXT NOT NULL,
+    "authorUserId" UUID NOT NULL,
+    "targetUserId" UUID,
+    "targetOrganizationId" TEXT,
     "rating" INTEGER NOT NULL,
     "comment" TEXT,
     "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -262,7 +304,7 @@ CREATE TABLE "Review" (
 CREATE TABLE "Dispute" (
     "id" TEXT NOT NULL,
     "bookingId" TEXT NOT NULL,
-    "raisedByUserId" TEXT NOT NULL,
+    "raisedByUserId" UUID NOT NULL,
     "reason" TEXT NOT NULL,
     "description" TEXT,
     "status" "DisputeStatus" NOT NULL DEFAULT 'OPEN',
@@ -273,20 +315,94 @@ CREATE TABLE "Dispute" (
     CONSTRAINT "Dispute_pkey" PRIMARY KEY ("id")
 );
 
--- CreateIndex
-CREATE UNIQUE INDEX "User_email_key" ON "User"("email");
+-- CreateTable
+CREATE TABLE "RewardAccount" (
+    "id" TEXT NOT NULL,
+    "workerId" TEXT NOT NULL,
+    "balanceCents" INTEGER NOT NULL DEFAULT 0,
+    "currency" TEXT NOT NULL DEFAULT 'cad',
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "RewardAccount_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RewardTransaction" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "type" "RewardTransactionType" NOT NULL,
+    "amountCents" INTEGER NOT NULL,
+    "bookingId" TEXT,
+    "redemptionId" TEXT,
+    "note" TEXT,
+    "createdBy" UUID,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+
+    CONSTRAINT "RewardTransaction_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RewardRedemption" (
+    "id" TEXT NOT NULL,
+    "accountId" TEXT NOT NULL,
+    "amountCents" INTEGER NOT NULL,
+    "provider" "RewardProvider" NOT NULL DEFAULT 'BLACKHAWK',
+    "status" "RewardRedemptionStatus" NOT NULL DEFAULT 'PENDING',
+    "giftCardBrand" TEXT,
+    "externalOrderId" TEXT,
+    "externalCardRef" TEXT,
+    "failureReason" TEXT,
+    "requestedAt" TIMESTAMP(3),
+    "fulfilledAt" TIMESTAMP(3),
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "RewardRedemption_pkey" PRIMARY KEY ("id")
+);
+
+-- CreateTable
+CREATE TABLE "RewardPolicy" (
+    "id" TEXT NOT NULL,
+    "organizationId" TEXT,
+    "earnAmountCents" INTEGER NOT NULL DEFAULT 500,
+    "currency" TEXT NOT NULL DEFAULT 'cad',
+    "active" BOOLEAN NOT NULL DEFAULT true,
+    "createdAt" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    "updatedAt" TIMESTAMP(3) NOT NULL,
+
+    CONSTRAINT "RewardPolicy_pkey" PRIMARY KEY ("id")
+);
 
 -- CreateIndex
-CREATE INDEX "User_role_idx" ON "User"("role");
+CREATE UNIQUE INDEX "Profile_email_key" ON "Profile"("email");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "RefreshToken_tokenHash_key" ON "RefreshToken"("tokenHash");
+CREATE INDEX "Profile_platformRole_idx" ON "Profile"("platformRole");
 
 -- CreateIndex
-CREATE INDEX "RefreshToken_userId_idx" ON "RefreshToken"("userId");
+CREATE INDEX "Organization_chainId_idx" ON "Organization"("chainId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "WorkerProfile_userId_key" ON "WorkerProfile"("userId");
+CREATE INDEX "Membership_profileId_idx" ON "Membership"("profileId");
+
+-- CreateIndex
+CREATE INDEX "Membership_organizationId_idx" ON "Membership"("organizationId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "Membership_organizationId_profileId_key" ON "Membership"("organizationId", "profileId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PharmacyChain_name_key" ON "PharmacyChain"("name");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "PharmacyChain_slug_key" ON "PharmacyChain"("slug");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "WorkerProfile_profileId_key" ON "WorkerProfile"("profileId");
+
+-- CreateIndex
+CREATE INDEX "WorkerProfile_workerRole_idx" ON "WorkerProfile"("workerRole");
 
 -- CreateIndex
 CREATE INDEX "WorkerProfile_city_state_idx" ON "WorkerProfile"("city", "state");
@@ -301,10 +417,10 @@ CREATE INDEX "Credential_status_idx" ON "Credential"("status");
 CREATE INDEX "Availability_workerId_idx" ON "Availability"("workerId");
 
 -- CreateIndex
-CREATE UNIQUE INDEX "PharmacyProfile_userId_key" ON "PharmacyProfile"("userId");
+CREATE INDEX "PharmacyLocation_organizationId_idx" ON "PharmacyLocation"("organizationId");
 
 -- CreateIndex
-CREATE INDEX "PharmacyLocation_pharmacyId_idx" ON "PharmacyLocation"("pharmacyId");
+CREATE INDEX "PharmacyLocation_chainId_idx" ON "PharmacyLocation"("chainId");
 
 -- CreateIndex
 CREATE INDEX "PharmacyLocation_city_state_idx" ON "PharmacyLocation"("city", "state");
@@ -316,7 +432,7 @@ CREATE INDEX "Shift_status_idx" ON "Shift"("status");
 CREATE INDEX "Shift_startAt_idx" ON "Shift"("startAt");
 
 -- CreateIndex
-CREATE INDEX "Shift_pharmacyId_idx" ON "Shift"("pharmacyId");
+CREATE INDEX "Shift_organizationId_idx" ON "Shift"("organizationId");
 
 -- CreateIndex
 CREATE INDEX "Application_workerId_idx" ON "Application"("workerId");
@@ -358,6 +474,9 @@ CREATE INDEX "Payment_status_idx" ON "Payment"("status");
 CREATE INDEX "Review_targetUserId_idx" ON "Review"("targetUserId");
 
 -- CreateIndex
+CREATE INDEX "Review_targetOrganizationId_idx" ON "Review"("targetOrganizationId");
+
+-- CreateIndex
 CREATE UNIQUE INDEX "Review_bookingId_authorUserId_key" ON "Review"("bookingId", "authorUserId");
 
 -- CreateIndex
@@ -366,11 +485,44 @@ CREATE UNIQUE INDEX "Dispute_bookingId_key" ON "Dispute"("bookingId");
 -- CreateIndex
 CREATE INDEX "Dispute_status_idx" ON "Dispute"("status");
 
--- AddForeignKey
-ALTER TABLE "RefreshToken" ADD CONSTRAINT "RefreshToken_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+-- CreateIndex
+CREATE UNIQUE INDEX "RewardAccount_workerId_key" ON "RewardAccount"("workerId");
+
+-- CreateIndex
+CREATE INDEX "RewardAccount_workerId_idx" ON "RewardAccount"("workerId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "RewardTransaction_bookingId_key" ON "RewardTransaction"("bookingId");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "RewardTransaction_redemptionId_key" ON "RewardTransaction"("redemptionId");
+
+-- CreateIndex
+CREATE INDEX "RewardTransaction_accountId_idx" ON "RewardTransaction"("accountId");
+
+-- CreateIndex
+CREATE INDEX "RewardTransaction_type_idx" ON "RewardTransaction"("type");
+
+-- CreateIndex
+CREATE INDEX "RewardRedemption_accountId_idx" ON "RewardRedemption"("accountId");
+
+-- CreateIndex
+CREATE INDEX "RewardRedemption_status_idx" ON "RewardRedemption"("status");
+
+-- CreateIndex
+CREATE UNIQUE INDEX "RewardPolicy_organizationId_key" ON "RewardPolicy"("organizationId");
 
 -- AddForeignKey
-ALTER TABLE "WorkerProfile" ADD CONSTRAINT "WorkerProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Organization" ADD CONSTRAINT "Organization_chainId_fkey" FOREIGN KEY ("chainId") REFERENCES "PharmacyChain"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Membership" ADD CONSTRAINT "Membership_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "Membership" ADD CONSTRAINT "Membership_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "WorkerProfile" ADD CONSTRAINT "WorkerProfile_profileId_fkey" FOREIGN KEY ("profileId") REFERENCES "Profile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Credential" ADD CONSTRAINT "Credential_workerId_fkey" FOREIGN KEY ("workerId") REFERENCES "WorkerProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
@@ -379,13 +531,13 @@ ALTER TABLE "Credential" ADD CONSTRAINT "Credential_workerId_fkey" FOREIGN KEY (
 ALTER TABLE "Availability" ADD CONSTRAINT "Availability_workerId_fkey" FOREIGN KEY ("workerId") REFERENCES "WorkerProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "PharmacyProfile" ADD CONSTRAINT "PharmacyProfile_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "PharmacyLocation" ADD CONSTRAINT "PharmacyLocation_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "PharmacyLocation" ADD CONSTRAINT "PharmacyLocation_pharmacyId_fkey" FOREIGN KEY ("pharmacyId") REFERENCES "PharmacyProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "PharmacyLocation" ADD CONSTRAINT "PharmacyLocation_chainId_fkey" FOREIGN KEY ("chainId") REFERENCES "PharmacyChain"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Shift" ADD CONSTRAINT "Shift_pharmacyId_fkey" FOREIGN KEY ("pharmacyId") REFERENCES "PharmacyProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Shift" ADD CONSTRAINT "Shift_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Shift" ADD CONSTRAINT "Shift_locationId_fkey" FOREIGN KEY ("locationId") REFERENCES "PharmacyLocation"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -412,10 +564,10 @@ ALTER TABLE "Conversation" ADD CONSTRAINT "Conversation_bookingId_fkey" FOREIGN 
 ALTER TABLE "Message" ADD CONSTRAINT "Message_conversationId_fkey" FOREIGN KEY ("conversationId") REFERENCES "Conversation"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Message" ADD CONSTRAINT "Message_senderId_fkey" FOREIGN KEY ("senderId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "User"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+ALTER TABLE "Notification" ADD CONSTRAINT "Notification_userId_fkey" FOREIGN KEY ("userId") REFERENCES "Profile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Payment" ADD CONSTRAINT "Payment_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "Booking"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
@@ -424,13 +576,31 @@ ALTER TABLE "Payment" ADD CONSTRAINT "Payment_bookingId_fkey" FOREIGN KEY ("book
 ALTER TABLE "Review" ADD CONSTRAINT "Review_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "Booking"("id") ON DELETE CASCADE ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Review" ADD CONSTRAINT "Review_authorUserId_fkey" FOREIGN KEY ("authorUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Review" ADD CONSTRAINT "Review_authorUserId_fkey" FOREIGN KEY ("authorUserId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Review" ADD CONSTRAINT "Review_targetUserId_fkey" FOREIGN KEY ("targetUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Review" ADD CONSTRAINT "Review_targetUserId_fkey" FOREIGN KEY ("targetUserId") REFERENCES "Profile"("id") ON DELETE SET NULL ON UPDATE CASCADE;
 
 -- AddForeignKey
 ALTER TABLE "Dispute" ADD CONSTRAINT "Dispute_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "Booking"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
 
 -- AddForeignKey
-ALTER TABLE "Dispute" ADD CONSTRAINT "Dispute_raisedByUserId_fkey" FOREIGN KEY ("raisedByUserId") REFERENCES "User"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+ALTER TABLE "Dispute" ADD CONSTRAINT "Dispute_raisedByUserId_fkey" FOREIGN KEY ("raisedByUserId") REFERENCES "Profile"("id") ON DELETE RESTRICT ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RewardAccount" ADD CONSTRAINT "RewardAccount_workerId_fkey" FOREIGN KEY ("workerId") REFERENCES "WorkerProfile"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RewardTransaction" ADD CONSTRAINT "RewardTransaction_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "RewardAccount"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RewardTransaction" ADD CONSTRAINT "RewardTransaction_bookingId_fkey" FOREIGN KEY ("bookingId") REFERENCES "Booking"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RewardTransaction" ADD CONSTRAINT "RewardTransaction_redemptionId_fkey" FOREIGN KEY ("redemptionId") REFERENCES "RewardRedemption"("id") ON DELETE SET NULL ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RewardRedemption" ADD CONSTRAINT "RewardRedemption_accountId_fkey" FOREIGN KEY ("accountId") REFERENCES "RewardAccount"("id") ON DELETE CASCADE ON UPDATE CASCADE;
+
+-- AddForeignKey
+ALTER TABLE "RewardPolicy" ADD CONSTRAINT "RewardPolicy_organizationId_fkey" FOREIGN KEY ("organizationId") REFERENCES "Organization"("id") ON DELETE CASCADE ON UPDATE CASCADE;

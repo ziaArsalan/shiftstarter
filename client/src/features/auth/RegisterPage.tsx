@@ -2,21 +2,25 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { Link, useNavigate, useSearchParams } from "react-router-dom";
-import { ApiError } from "../../lib/api";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { FormField } from "../../components/FormField";
 import { Input } from "../../components/Input";
+import { Select } from "../../components/Input";
+import { WORKER_ROLE_LABELS, type WorkerRole } from "../../lib/types";
 import { useAuth } from "./AuthContext";
 import { dashboardPathFor } from "./guards";
 import { registerSchema, type RegisterForm } from "./auth.schemas";
 
+const WORKER_ROLES = Object.keys(WORKER_ROLE_LABELS) as WorkerRole[];
+
 export function RegisterPage() {
-  const { register: registerUser } = useAuth();
+  const { signUp, bootstrap } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
-  const initialRole = searchParams.get("role") === "PHARMACY" ? "PHARMACY" : "WORKER";
+  const initialIntent = searchParams.get("intent") === "pharmacy" ? "pharmacy" : "worker";
   const [formError, setFormError] = useState<string | null>(null);
+  const [confirmMsg, setConfirmMsg] = useState<string | null>(null);
 
   const {
     register,
@@ -26,40 +30,42 @@ export function RegisterPage() {
     formState: { errors, isSubmitting },
   } = useForm<RegisterForm>({
     resolver: zodResolver(registerSchema),
-    defaultValues: { role: initialRole },
+    defaultValues: { intent: initialIntent },
   });
 
-  const role = watch("role");
+  const intent = watch("intent");
 
   async function onSubmit(values: RegisterForm) {
     setFormError(null);
+    setConfirmMsg(null);
     try {
-      const user = await registerUser({
-        email: values.email,
-        password: values.password,
-        role: values.role,
-        firstName: values.firstName,
-        lastName: values.lastName,
-        businessName: values.businessName,
-      });
-      navigate(dashboardPathFor(user.role), { replace: true });
-    } catch (err) {
-      if (err instanceof ApiError && err.code === "CONFLICT") {
-        setFormError("An account with this email already exists. Try logging in.");
-      } else if (err instanceof ApiError) {
-        setFormError(err.message);
-      } else {
-        setFormError("Unable to create your account. Please try again.");
+      const { needsEmailConfirmation } = await signUp(values.email, values.password);
+      if (needsEmailConfirmation) {
+        setConfirmMsg(
+          "Check your email to confirm your account, then log in to finish setting up.",
+        );
+        return;
       }
+      const me = await bootstrap({
+        intent: values.intent,
+        fullName: values.fullName,
+        workerRole: values.workerRole,
+        organizationName: values.organizationName,
+      });
+      navigate(dashboardPathFor(me.capabilities), { replace: true });
+    } catch (err) {
+      setFormError(
+        err instanceof Error ? err.message : "Unable to create your account. Please try again.",
+      );
     }
   }
 
-  const roleButton = (value: "WORKER" | "PHARMACY", label: string) => (
+  const intentButton = (value: "worker" | "pharmacy", label: string) => (
     <button
       type="button"
-      onClick={() => setValue("role", value, { shouldValidate: true })}
+      onClick={() => setValue("intent", value, { shouldValidate: true })}
       className={`flex-1 rounded-lg border px-4 py-3 text-sm font-semibold transition ${
-        role === value
+        intent === value
           ? "border-brand-blue bg-brand-blue/5 text-brand-navy"
           : "border-slate-300 text-slate-600 hover:border-brand-azure"
       }`}
@@ -84,30 +90,47 @@ export function RegisterPage() {
               {formError}
             </div>
           )}
+          {confirmMsg && (
+            <div
+              role="status"
+              className="mb-4 rounded-lg border border-green-200 bg-green-50 px-3 py-2 text-sm font-medium text-green-800"
+            >
+              {confirmMsg}
+            </div>
+          )}
           <form onSubmit={handleSubmit(onSubmit)} className="space-y-4" noValidate>
-            <FormField label="I am a" error={errors.role?.message}>
+            <FormField label="I am a" error={errors.intent?.message}>
               <div className="flex gap-3">
-                {roleButton("WORKER", "Worker")}
-                {roleButton("PHARMACY", "Pharmacy")}
+                {intentButton("worker", "Worker")}
+                {intentButton("pharmacy", "Pharmacy")}
               </div>
             </FormField>
 
-            {role === "WORKER" ? (
-              <div className="grid grid-cols-2 gap-3">
-                <FormField label="First name" htmlFor="firstName" error={errors.firstName?.message}>
-                  <Input id="firstName" {...register("firstName")} />
+            {intent === "worker" ? (
+              <>
+                <FormField label="Full name" htmlFor="fullName" error={errors.fullName?.message}>
+                  <Input id="fullName" {...register("fullName")} />
                 </FormField>
-                <FormField label="Last name" htmlFor="lastName" error={errors.lastName?.message}>
-                  <Input id="lastName" {...register("lastName")} />
+                <FormField label="Your role" htmlFor="workerRole" error={errors.workerRole?.message}>
+                  <Select id="workerRole" defaultValue="" {...register("workerRole")}>
+                    <option value="" disabled>
+                      Select a role
+                    </option>
+                    {WORKER_ROLES.map((r) => (
+                      <option key={r} value={r}>
+                        {WORKER_ROLE_LABELS[r]}
+                      </option>
+                    ))}
+                  </Select>
                 </FormField>
-              </div>
+              </>
             ) : (
               <FormField
-                label="Business name"
-                htmlFor="businessName"
-                error={errors.businessName?.message}
+                label="Organization name"
+                htmlFor="organizationName"
+                error={errors.organizationName?.message}
               >
-                <Input id="businessName" {...register("businessName")} />
+                <Input id="organizationName" {...register("organizationName")} />
               </FormField>
             )}
 

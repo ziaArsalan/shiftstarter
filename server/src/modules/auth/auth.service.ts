@@ -1,156 +1,168 @@
-import argon2 from "argon2";
-import type { Role, User } from "@prisma/client";
+import type { PlatformRole, WorkerProfile } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../lib/errors.js";
-import {
-  generateRefreshToken,
-  hashRefreshToken,
-  refreshTokenExpiry,
-  signAccessToken,
-} from "../../lib/tokens.js";
-import type { LoginInput, RegisterInput } from "./auth.schemas.js";
+import type { AuthContext } from "../../middleware/auth.js";
+import type { BootstrapInput } from "./auth.schemas.js";
 
-// A valid argon2id hash used only to equalise verify timing on unknown emails.
-const DUMMY_HASH =
-  "$argon2id$v=19$m=65536,t=3,p=4$QpRtO7G3K1QNvArqM3/Pbg$FJAPYIf1bUyahJLIpD/qCjQii8dMZcf45ByLsCIYNmg";
-
-export interface IssuedTokens {
-  accessToken: string;
-  refreshToken: string;
-}
-
-export function hashPassword(password: string): Promise<string> {
-  return argon2.hash(password, { type: argon2.argon2id });
-}
-
-async function issueTokens(user: Pick<User, "id" | "role">): Promise<IssuedTokens> {
-  const accessToken = signAccessToken({ sub: user.id, role: user.role });
-  const { token, tokenHash } = generateRefreshToken();
-  await prisma.refreshToken.create({
-    data: { userId: user.id, tokenHash, expiresAt: refreshTokenExpiry() },
-  });
-  return { accessToken, refreshToken: token };
-}
-
-export function publicUser(user: User) {
+function serializeWorker(worker: WorkerProfile) {
   return {
-    id: user.id,
-    email: user.email,
-    role: user.role,
-    status: user.status,
-    emailVerified: user.emailVerified,
-    createdAt: user.createdAt,
+    ...worker,
+    hourlyRateExpectation:
+      worker.hourlyRateExpectation === null ? null : Number(worker.hourlyRateExpectation),
   };
 }
 
-export async function register(input: RegisterInput) {
-  const existing = await prisma.user.findUnique({ where: { email: input.email } });
-  if (existing) throw AppError.conflict("An account with this email already exists");
-
-  const passwordHash = await hashPassword(input.password);
-
-  const user = await prisma.$transaction(async (tx) => {
-    const created = await tx.user.create({
-      data: { email: input.email, passwordHash, role: input.role as Role },
-    });
-    if (input.role === "WORKER") {
-      await tx.workerProfile.create({
-        data: { userId: created.id, firstName: input.firstName!, lastName: input.lastName! },
-      });
-    } else {
-      await tx.pharmacyProfile.create({
-        data: { userId: created.id, businessName: input.businessName! },
-      });
-    }
-    return created;
-  });
-
-  const tokens = await issueTokens(user);
-  return { user: publicUser(user), ...tokens };
+/** Platform role to persist, honouring the SUPER_ADMIN JWT claim. */
+function platformRoleFromClaim(tokenPlatformRole?: string): PlatformRole {
+  return tokenPlatformRole === "SUPER_ADMIN" ? "SUPER_ADMIN" : "USER";
 }
 
-export async function login(input: LoginInput) {
-  const user = await prisma.user.findUnique({ where: { email: input.email } });
-  const genericError = AppError.unauthorized("Invalid email or password");
-  if (!user) {
-    // Still run a verify to blunt timing-based account enumeration.
-    await argon2.verify(DUMMY_HASH, input.password).catch(() => false);
-    throw genericError;
-  }
+/**
+ * Ensure a Profile row exists for the authenticated Supabase user. The claimed
+ * platform role is mirrored onto the Profile so it is the single source of
+ * truth for RBAC. Idempotent.
+ */
+export async function ensureProfile(auth: AuthContext) {
+  const platformRole = platformRoleFromClaim(auth.tokenPlatformRole);
+  const email = auth.email || auth.profile?.email;
+  if (!email) throw AppError.validation("Authenticated user has no email");
 
-  const valid = await argon2.verify(user.passwordHash, input.password).catch(() => false);
-  if (!valid) throw genericError;
-
-  if (user.status === "SUSPENDED") {
-    throw AppError.forbidden("This account has been suspended. Contact support.");
-  }
-
-  const tokens = await issueTokens(user);
-  return { user: publicUser(user), ...tokens };
-}
-
-export async function refresh(rawToken: string | undefined) {
-  if (!rawToken) throw AppError.unauthorized("Missing refresh token");
-  const tokenHash = hashRefreshToken(rawToken);
-  const existing = await prisma.refreshToken.findUnique({ where: { tokenHash } });
-
-  if (!existing) throw AppError.unauthorized("Invalid refresh token");
-
-  // Reuse of an already-revoked token => likely theft: revoke the whole family.
-  if (existing.revokedAt) {
-    await prisma.refreshToken.updateMany({
-      where: { userId: existing.userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-    throw AppError.unauthorized("Refresh token reuse detected");
-  }
-
-  if (existing.expiresAt.getTime() < Date.now()) {
-    throw AppError.unauthorized("Refresh token expired");
-  }
-
-  const user = await prisma.user.findUnique({ where: { id: existing.userId } });
-  if (!user) throw AppError.unauthorized("Invalid refresh token");
-  if (user.status === "SUSPENDED") throw AppError.forbidden("This account has been suspended.");
-
-  // Rotate: revoke the presented token, issue a fresh pair.
-  await prisma.refreshToken.update({ where: { id: existing.id }, data: { revokedAt: new Date() } });
-  const tokens = await issueTokens(user);
-  return { user: publicUser(user), ...tokens };
-}
-
-export async function logout(rawToken: string | undefined) {
-  if (!rawToken) return;
-  const tokenHash = hashRefreshToken(rawToken);
-  await prisma.refreshToken.updateMany({
-    where: { tokenHash, revokedAt: null },
-    data: { revokedAt: new Date() },
+  return prisma.profile.upsert({
+    where: { id: auth.userId },
+    create: { id: auth.userId, email, platformRole },
+    // Keep the super-admin claim mirrored; never downgrade an existing admin
+    // on a stale/absent claim.
+    update: platformRole === "SUPER_ADMIN" ? { platformRole } : {},
   });
 }
 
-export async function me(userId: string) {
-  const user = await prisma.user.findUnique({
-    where: { id: userId },
-    include: {
-      workerProfile: { select: { id: true, firstName: true, lastName: true } },
-      pharmacyProfile: { select: { id: true, businessName: true } },
+export async function bootstrap(auth: AuthContext, input: BootstrapInput) {
+  await ensureProfile(auth);
+
+  if (input.intent === "worker") {
+    const existing = await prisma.workerProfile.findUnique({ where: { profileId: auth.userId } });
+    await prisma.$transaction(async (tx) => {
+      if (input.fullName || input.phone) {
+        await tx.profile.update({
+          where: { id: auth.userId },
+          data: {
+            ...(input.fullName ? { fullName: input.fullName } : {}),
+            ...(input.phone ? { phone: input.phone } : {}),
+          },
+        });
+      }
+      if (!existing) {
+        await tx.workerProfile.create({
+          data: { profileId: auth.userId, workerRole: input.workerRole! },
+        });
+      }
+    });
+  } else {
+    // Pharmacy intent: create an Organization + owner Membership once.
+    const existingMembership = await prisma.membership.findFirst({
+      where: { profileId: auth.userId },
+    });
+    await prisma.$transaction(async (tx) => {
+      if (input.fullName || input.phone) {
+        await tx.profile.update({
+          where: { id: auth.userId },
+          data: {
+            ...(input.fullName ? { fullName: input.fullName } : {}),
+            ...(input.phone ? { phone: input.phone } : {}),
+          },
+        });
+      }
+      if (!existingMembership) {
+        if (input.chainId) {
+          const chain = await tx.pharmacyChain.findUnique({ where: { id: input.chainId } });
+          if (!chain) throw AppError.validation("Selected chain does not exist");
+        }
+        const org = await tx.organization.create({
+          data: { name: input.organizationName!, chainId: input.chainId ?? null },
+        });
+        await tx.membership.create({
+          data: { organizationId: org.id, profileId: auth.userId, role: "OWNER", status: "ACTIVE" },
+        });
+      }
+    });
+  }
+
+  // Re-read the full, provisioned view.
+  const fresh = await loadContext(auth.userId);
+  return me(fresh);
+}
+
+/** Reload an AuthContext fresh from the DB (used after mutations). */
+async function loadContext(userId: string): Promise<AuthContext> {
+  const profile = await prisma.profile.findUnique({ where: { id: userId } });
+  if (!profile) throw AppError.unauthorized();
+  const [memberships, workerProfile] = await Promise.all([
+    prisma.membership.findMany({ where: { profileId: userId, status: "ACTIVE" } }),
+    prisma.workerProfile.findUnique({ where: { profileId: userId } }),
+  ]);
+  return {
+    userId,
+    email: profile.email,
+    tokenPlatformRole: profile.platformRole,
+    profile,
+    memberships,
+    workerProfile,
+  };
+}
+
+export async function me(auth: AuthContext) {
+  if (!auth.profile) {
+    // Profile not provisioned yet — report the minimal identity so the client
+    // can route the user into the sign-up/bootstrap flow.
+    return {
+      profile: null,
+      worker: null,
+      organizations: [],
+      capabilities: {
+        provisioned: false,
+        isSuperAdmin: auth.tokenPlatformRole === "SUPER_ADMIN",
+        isWorker: false,
+        isOrgOwner: false,
+        isOrgManager: false,
+      },
+    };
+  }
+
+  const memberships = await prisma.membership.findMany({
+    where: { profileId: auth.userId, status: "ACTIVE" },
+    include: { organization: { include: { chain: true } } },
+    orderBy: { createdAt: "asc" },
+  });
+
+  const worker = auth.workerProfile ? serializeWorker(auth.workerProfile) : null;
+  const isSuperAdmin = auth.profile.platformRole === "SUPER_ADMIN";
+  const isOrgOwner = memberships.some((m) => m.role === "OWNER");
+  const isOrgManager = memberships.some((m) => m.role === "MANAGER");
+
+  return {
+    profile: {
+      id: auth.profile.id,
+      email: auth.profile.email,
+      fullName: auth.profile.fullName,
+      phone: auth.profile.phone,
+      avatarUrl: auth.profile.avatarUrl,
+      platformRole: auth.profile.platformRole,
+      status: auth.profile.status,
+      createdAt: auth.profile.createdAt,
     },
-  });
-  if (!user) throw AppError.unauthorized();
-
-  const profile =
-    user.role === "WORKER"
-      ? user.workerProfile
-        ? {
-            id: user.workerProfile.id,
-            displayName: `${user.workerProfile.firstName} ${user.workerProfile.lastName}`.trim(),
-          }
-        : null
-      : user.role === "PHARMACY"
-        ? user.pharmacyProfile
-          ? { id: user.pharmacyProfile.id, displayName: user.pharmacyProfile.businessName }
-          : null
-        : null;
-
-  return { ...publicUser(user), profile };
+    worker,
+    organizations: memberships.map((m) => ({
+      membershipId: m.id,
+      role: m.role,
+      status: m.status,
+      organization: m.organization,
+    })),
+    capabilities: {
+      provisioned: true,
+      isSuperAdmin,
+      isWorker: !!worker,
+      isOrgOwner,
+      isOrgManager,
+    },
+  };
 }

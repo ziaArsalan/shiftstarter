@@ -5,10 +5,10 @@ import { Card, CardTitle } from "../../components/Card";
 import { Badge } from "../../components/Badge";
 import { Spinner } from "../../components/Spinner";
 import { useAuth } from "../auth/AuthContext";
-import type { Credential } from "../../lib/types";
+import { WORKER_ROLE_LABELS, type Credential } from "../../lib/types";
 
 export function WorkerDashboard() {
-  const { user } = useAuth();
+  const { me } = useAuth();
   const { data, isLoading } = useQuery({
     queryKey: ["worker-credentials"],
     queryFn: () => api<{ credentials: Credential[] }>("/workers/me/credentials"),
@@ -17,14 +17,18 @@ export function WorkerDashboard() {
   const credentials = data?.credentials ?? [];
   const approved = credentials.filter((c) => c.status === "APPROVED").length;
   const pending = credentials.filter((c) => c.status === "PENDING").length;
+  const name = me?.profile?.fullName;
+  const role = me?.worker?.workerRole;
 
   return (
     <div className="space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-brand-navy">
-          Welcome{user?.profile?.displayName ? `, ${user.profile.displayName}` : ""}
+          Welcome{name ? `, ${name}` : ""}
         </h1>
-        <p className="mt-1 text-slate-600">Keep your profile and credentials up to date.</p>
+        <p className="mt-1 text-slate-600">
+          {role ? WORKER_ROLE_LABELS[role] : "Keep your profile and credentials up to date."}
+        </p>
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
@@ -48,7 +52,7 @@ export function WorkerDashboard() {
         <Card>
           <CardTitle>Your profile</CardTitle>
           <p className="mb-4 text-sm text-slate-600">
-            Add your professional details, rate expectations, and location.
+            Add your role, rate expectations, and location.
           </p>
           <Link to="/worker/profile" className="text-sm font-semibold text-brand-blue hover:underline">
             Edit profile →
@@ -57,11 +61,11 @@ export function WorkerDashboard() {
         <Card>
           <CardTitle>Credentials</CardTitle>
           <p className="mb-4 text-sm text-slate-600">
-            Upload your license and documents for admin verification.
+            Upload your license and documents for verification.
           </p>
           {credentials.slice(0, 3).map((c) => (
             <div key={c.id} className="mb-1 flex items-center justify-between text-sm">
-              <span className="text-slate-700">{c.type}</span>
+              <span className="text-slate-700">{c.type.replace(/_/g, " ")}</span>
               <Badge status={c.status} />
             </div>
           ))}

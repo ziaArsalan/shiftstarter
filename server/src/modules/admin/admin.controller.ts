@@ -1,16 +1,13 @@
 import type { Request, Response } from "express";
-import { AppError } from "../../lib/errors.js";
+import { getAuth } from "../../middleware/auth.js";
+import type { PlatformRole, UserStatus, VerificationStatus } from "@prisma/client";
 import * as service from "./admin.service.js";
-
-function adminId(req: Request): string {
-  if (!req.user) throw AppError.unauthorized();
-  return req.user.id;
-}
 
 export async function listUsers(req: Request, res: Response) {
   const q = req.query as unknown as {
-    role?: "WORKER" | "PHARMACY" | "ADMIN";
-    status?: "ACTIVE" | "SUSPENDED" | "PENDING";
+    platformRole?: PlatformRole;
+    status?: UserStatus;
+    q?: string;
     page: number;
     pageSize: number;
   };
@@ -18,13 +15,18 @@ export async function listUsers(req: Request, res: Response) {
 }
 
 export async function updateUser(req: Request, res: Response) {
-  const updated = await service.updateUserStatus(adminId(req), req.params.id, req.body.status);
+  const updated = await service.updateUserStatus(getAuth(req).userId, req.params.id, req.body.status);
   res.json({ user: updated });
+}
+
+export async function listOrgs(req: Request, res: Response) {
+  const q = req.query as unknown as { q?: string; page: number; pageSize: number };
+  res.json(await service.listOrgs(q));
 }
 
 export async function listCredentials(req: Request, res: Response) {
   const q = req.query as unknown as {
-    status?: "PENDING" | "APPROVED" | "REJECTED";
+    status?: VerificationStatus;
     page: number;
     pageSize: number;
   };
@@ -33,6 +35,6 @@ export async function listCredentials(req: Request, res: Response) {
 
 export async function reviewCredential(req: Request, res: Response) {
   const { action, notes } = req.body as { action: "approve" | "reject"; notes?: string };
-  const credential = await service.reviewCredential(adminId(req), req.params.id, action, notes);
+  const credential = await service.reviewCredential(getAuth(req).userId, req.params.id, action, notes);
   res.json({ credential });
 }

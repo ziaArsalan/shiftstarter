@@ -3,31 +3,12 @@ import { Link, NavLink, Outlet, useNavigate } from "react-router-dom";
 import { useAuth } from "../features/auth/AuthContext";
 import { dashboardPathFor } from "../features/auth/guards";
 import { Button } from "./Button";
-import type { Role } from "../lib/types";
 
-interface NavItem {
+export interface NavItem {
   to: string;
   label: string;
   end?: boolean;
 }
-
-const navByRole: Record<Role, NavItem[]> = {
-  WORKER: [
-    { to: "/worker", label: "Dashboard", end: true },
-    { to: "/worker/profile", label: "Profile" },
-    { to: "/worker/credentials", label: "Credentials" },
-  ],
-  PHARMACY: [
-    { to: "/pharmacy", label: "Dashboard", end: true },
-    { to: "/pharmacy/profile", label: "Business Profile" },
-    { to: "/pharmacy/locations", label: "Locations" },
-  ],
-  ADMIN: [
-    { to: "/admin", label: "Dashboard", end: true },
-    { to: "/admin/users", label: "Users" },
-    { to: "/admin/credentials", label: "Credentials" },
-  ],
-};
 
 function linkClass({ isActive }: { isActive: boolean }) {
   return `block rounded-md px-3 py-2 text-sm font-medium transition ${
@@ -35,23 +16,29 @@ function linkClass({ isActive }: { isActive: boolean }) {
   }`;
 }
 
-export function AppShell() {
-  const { user, logout } = useAuth();
+export function AppShell({ items, badge }: { items: NavItem[]; badge?: string }) {
+  const { me, signOut } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
-  const items = user ? navByRole[user.role] : [];
 
   async function handleLogout() {
-    await logout();
+    await signOut();
     navigate("/login", { replace: true });
   }
+
+  const home = dashboardPathFor(me?.capabilities);
 
   return (
     <div className="min-h-screen bg-surface-muted">
       <header className="border-b border-slate-200 bg-white">
         <div className="mx-auto flex max-w-6xl items-center justify-between px-4 py-3">
-          <Link to={user ? dashboardPathFor(user.role) : "/"} className="flex items-center gap-2">
+          <Link to={home} className="flex items-center gap-2">
             <img src="/shiftstarter-logo.png" alt="ShiftStarter" className="h-9 w-auto" />
+            {badge && (
+              <span className="rounded bg-brand-navy px-2 py-0.5 text-xs font-bold text-white">
+                {badge}
+              </span>
+            )}
           </Link>
 
           <nav className="hidden items-center gap-1 md:flex">
@@ -63,7 +50,9 @@ export function AppShell() {
           </nav>
 
           <div className="hidden items-center gap-3 md:flex">
-            <span className="text-sm text-slate-500">{user?.email}</span>
+            <span className="max-w-[16rem] truncate text-sm text-slate-500">
+              {me?.profile?.email}
+            </span>
             <Button variant="secondary" onClick={handleLogout}>
               Log out
             </Button>

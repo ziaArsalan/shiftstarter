@@ -1,3 +1,5 @@
+import { supabase } from "./supabase";
+
 export const API_URL =
   (import.meta.env.VITE_API_URL as string | undefined) ?? "http://localhost:4000/api/v1";
 
@@ -18,20 +20,6 @@ export class ApiError extends Error {
     this.code = code;
     this.details = details;
   }
-}
-
-// Access token lives only in memory (not localStorage) to limit XSS exposure.
-let accessToken: string | null = null;
-let onUnauthorized: (() => void) | null = null;
-
-export function setAccessToken(token: string | null) {
-  accessToken = token;
-}
-export function getAccessToken() {
-  return accessToken;
-}
-export function setUnauthorizedHandler(fn: (() => void) | null) {
-  onUnauthorized = fn;
 }
 
 async function parseError(res: Response): Promise<ApiError> {
@@ -56,19 +44,21 @@ interface RequestOptions {
   body?: unknown;
   /** Set true for multipart/FormData bodies (no JSON content-type). */
   formData?: boolean;
-  /** Skip the one-shot refresh-on-401 (used by refresh/login themselves). */
-  skipRefresh?: boolean;
 }
 
-async function rawRequest(path: string, opts: RequestOptions): Promise<Response> {
+async function currentToken(): Promise<string | null> {
+  const { data } = await supabase.auth.getSession();
+  return data.session?.access_token ?? null;
+}
+
+async function rawRequest(path: string, opts: RequestOptions, token: string | null): Promise<Response> {
   const headers: Record<string, string> = {};
   if (!opts.formData && opts.body !== undefined) headers["Content-Type"] = "application/json";
-  if (accessToken) headers.Authorization = `Bearer ${accessToken}`;
+  if (token) headers.Authorization = `Bearer ${token}`;
 
   return fetch(`${API_URL}${path}`, {
     method: opts.method ?? "GET",
     headers,
-    credentials: "include",
     body:
       opts.body === undefined
         ? undefined
@@ -78,39 +68,16 @@ async function rawRequest(path: string, opts: RequestOptions): Promise<Response>
   });
 }
 
-/** Attempt a single refresh; returns the new access token or null. */
-async function tryRefresh(): Promise<string | null> {
-  try {
-    const res = await fetch(`${API_URL}/auth/refresh`, {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: "{}",
-    });
-    if (!res.ok) return null;
-    const data = await res.json();
-    if (data?.accessToken) {
-      setAccessToken(data.accessToken);
-      return data.accessToken;
-    }
-    return null;
-  } catch {
-    return null;
-  }
-}
-
-/** Core JSON request: attaches the token and refreshes once on a 401. */
+/** Core JSON request: attaches the Supabase token and refreshes once on a 401. */
 export async function api<T = unknown>(path: string, opts: RequestOptions = {}): Promise<T> {
-  let res = await rawRequest(path, opts);
+  let token = await currentToken();
+  let res = await rawRequest(path, opts, token);
 
-  if (res.status === 401 && !opts.skipRefresh) {
-    const newToken = await tryRefresh();
-    if (newToken) {
-      res = await rawRequest(path, opts);
-    } else {
-      setAccessToken(null);
-      onUnauthorized?.();
-      throw await parseError(res);
+  if (res.status === 401) {
+    const { data } = await supabase.auth.refreshSession();
+    token = data.session?.access_token ?? null;
+    if (token) {
+      res = await rawRequest(path, opts, token);
     }
   }
 
@@ -121,26 +88,15 @@ export async function api<T = unknown>(path: string, opts: RequestOptions = {}):
 
 /**
  * Fetch a binary resource (e.g. a credential document) as a Blob with the
- * access token attached, refreshing once on a 401. Used for authenticated
- * file viewing, since the token lives in memory and cannot ride an <a> tag.
+ * Supabase access token attached, refreshing once on a 401.
  */
 export async function apiBlob(path: string): Promise<Blob> {
-  const doFetch = () =>
-    fetch(`${API_URL}${path}`, {
-      headers: accessToken ? { Authorization: `Bearer ${accessToken}` } : {},
-      credentials: "include",
-    });
-
-  let res = await doFetch();
+  let token = await currentToken();
+  let res = await rawRequest(path, {}, token);
   if (res.status === 401) {
-    const newToken = await tryRefresh();
-    if (newToken) {
-      res = await doFetch();
-    } else {
-      setAccessToken(null);
-      onUnauthorized?.();
-      throw await parseError(res);
-    }
+    const { data } = await supabase.auth.refreshSession();
+    token = data.session?.access_token ?? null;
+    if (token) res = await rawRequest(path, {}, token);
   }
   if (!res.ok) throw await parseError(res);
   return res.blob();

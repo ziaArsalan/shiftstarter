@@ -61,7 +61,7 @@ export async function createCredential(
 
   const workerId = await requireProfileId(userId);
   const ext = EXT_BY_MIME[detected.mime] ?? "";
-  const key = `credentials/${workerId}/${crypto.randomUUID()}${ext}`;
+  const key = `${workerId}/${crypto.randomUUID()}${ext}`;
 
   await storage.save(key, file.buffer, detected.mime);
 
@@ -106,27 +106,26 @@ export async function deleteCredential(userId: string, credentialId: string) {
   await storage.delete(credential.fileUrl).catch(() => undefined);
 }
 
-/** Fetch a credential for download, enforcing owner-or-admin access. */
+/** Fetch a credential for download, enforcing owner-or-super-admin access. */
 export async function getCredentialFile(
-  requester: { id: string; role: string },
+  requester: { userId: string; isSuperAdmin: boolean },
   credentialId: string,
 ) {
   const credential = await prisma.credential.findUnique({
     where: { id: credentialId },
-    include: { worker: { select: { userId: true } } },
+    include: { worker: { select: { profileId: true } } },
   });
   if (!credential) throw AppError.notFound("Credential not found");
 
-  const isOwner = credential.worker.userId === requester.id;
-  const isAdmin = requester.role === "ADMIN";
-  if (!isOwner && !isAdmin) throw AppError.notFound("Credential not found");
+  const isOwner = credential.worker.profileId === requester.userId;
+  if (!isOwner && !requester.isSuperAdmin) throw AppError.notFound("Credential not found");
 
   if (!(await storage.exists(credential.fileUrl))) {
     throw AppError.notFound("Stored file is missing");
   }
 
   return {
-    stream: storage.createReadStream(credential.fileUrl),
+    stream: await storage.createReadStream(credential.fileUrl),
     mimeType: credential.mimeType,
     fileName: credential.fileName,
   };

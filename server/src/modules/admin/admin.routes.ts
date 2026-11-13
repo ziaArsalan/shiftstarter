@@ -1,12 +1,14 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/errors.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { requireRole } from "../../middleware/rbac.js";
+import { requirePlatformRole } from "../../middleware/rbac.js";
 import { validate } from "../../middleware/validate.js";
+import { adminChainsRouter } from "../chains/chains.routes.js";
 import * as controller from "./admin.controller.js";
 import {
   credentialIdParams,
   listCredentialsQuery,
+  listOrgsQuery,
   listUsersQuery,
   reviewCredentialSchema,
   updateUserSchema,
@@ -15,7 +17,7 @@ import {
 
 export const adminRouter = Router();
 
-adminRouter.use(requireAuth, requireRole("ADMIN"));
+adminRouter.use(requireAuth, requirePlatformRole("SUPER_ADMIN"));
 
 adminRouter.get("/users", validate({ query: listUsersQuery }), asyncHandler(controller.listUsers));
 adminRouter.patch(
@@ -23,6 +25,8 @@ adminRouter.patch(
   validate({ params: userIdParams, body: updateUserSchema }),
   asyncHandler(controller.updateUser),
 );
+
+adminRouter.get("/orgs", validate({ query: listOrgsQuery }), asyncHandler(controller.listOrgs));
 
 adminRouter.get(
   "/credentials",
@@ -34,3 +38,6 @@ adminRouter.patch(
   validate({ params: credentialIdParams, body: reviewCredentialSchema }),
   asyncHandler(controller.reviewCredential),
 );
+
+// Pharmacy-chain catalog management (super-admin CRUD + logo upload).
+adminRouter.use("/chains", adminChainsRouter);

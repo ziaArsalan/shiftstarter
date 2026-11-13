@@ -6,33 +6,35 @@ import { applyApiError } from "../../lib/formErrors";
 import { Button } from "../../components/Button";
 import { Card, CardTitle } from "../../components/Card";
 import { FormField } from "../../components/FormField";
-import { Input, Textarea } from "../../components/Input";
+import { Input, Select, Textarea } from "../../components/Input";
 import { Spinner } from "../../components/Spinner";
 import { useToast } from "../../components/Toast";
-import type { PharmacyProfile } from "../../lib/types";
+import { useAuth } from "../auth/AuthContext";
+import type { Organization, PharmacyChain } from "../../lib/types";
 
-type ProfileForm = {
-  businessName: string;
+type OrgForm = {
+  name: string;
   description: string;
   contactPhone: string;
   website: string;
+  chainId: string;
 };
 
-const FIELDS: Array<keyof ProfileForm> = [
-  "businessName",
-  "description",
-  "contactPhone",
-  "website",
-];
+const FIELDS: Array<keyof OrgForm> = ["name", "description", "contactPhone", "website", "chainId"];
 
-export function BusinessProfilePage() {
+export function OrgProfilePage() {
   const queryClient = useQueryClient();
   const { notify } = useToast();
+  const { refreshMe } = useAuth();
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["pharmacy-profile"],
-    queryFn: () => api<{ profile: PharmacyProfile }>("/pharmacies/me/profile"),
+    queryKey: ["org"],
+    queryFn: () => api<{ organization: Organization }>("/orgs/me"),
+  });
+  const chainsQuery = useQuery({
+    queryKey: ["chains"],
+    queryFn: () => api<{ chains: PharmacyChain[] }>("/chains"),
   });
 
   const {
@@ -41,37 +43,41 @@ export function BusinessProfilePage() {
     reset,
     setError,
     formState: { errors, isSubmitting },
-  } = useForm<ProfileForm>();
+  } = useForm<OrgForm>();
 
   useEffect(() => {
-    if (data?.profile) {
+    if (data?.organization) {
+      const o = data.organization;
       reset({
-        businessName: data.profile.businessName ?? "",
-        description: data.profile.description ?? "",
-        contactPhone: data.profile.contactPhone ?? "",
-        website: data.profile.website ?? "",
+        name: o.name ?? "",
+        description: o.description ?? "",
+        contactPhone: o.contactPhone ?? "",
+        website: o.website ?? "",
+        chainId: o.chainId ?? "",
       });
     }
   }, [data, reset]);
 
   const mutation = useMutation({
-    mutationFn: (payload: ProfileForm) =>
-      api<{ profile: PharmacyProfile }>("/pharmacies/me/profile", {
+    mutationFn: (v: OrgForm) =>
+      api<{ organization: Organization }>("/orgs/me", {
         method: "PUT",
         body: {
-          businessName: payload.businessName.trim() || undefined,
-          description: payload.description.trim() || undefined,
-          contactPhone: payload.contactPhone.trim() || undefined,
-          website: payload.website.trim() || undefined,
+          name: v.name.trim() || undefined,
+          description: v.description.trim() || undefined,
+          contactPhone: v.contactPhone.trim() || undefined,
+          website: v.website.trim() || undefined,
+          chainId: v.chainId ? v.chainId : null,
         },
       }),
-    onSuccess: (res) => {
-      queryClient.setQueryData(["pharmacy-profile"], res);
-      notify("Business profile saved", "success");
+    onSuccess: async (res) => {
+      queryClient.setQueryData(["org"], res);
+      notify("Organization saved", "success");
+      await refreshMe();
     },
   });
 
-  async function onSubmit(values: ProfileForm) {
+  async function onSubmit(values: OrgForm) {
     setFormError(null);
     try {
       await mutation.mutateAsync(values);
@@ -88,9 +94,11 @@ export function BusinessProfilePage() {
     );
   }
 
+  const chains = chainsQuery.data?.chains ?? [];
+
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold text-brand-navy">Business profile</h1>
+      <h1 className="text-2xl font-bold text-brand-navy">Organization profile</h1>
       {formError && (
         <div
           role="alert"
@@ -103,21 +111,23 @@ export function BusinessProfilePage() {
         <Card>
           <CardTitle>Details</CardTitle>
           <div className="mt-4 space-y-4">
-            <FormField
-              label="Business name"
-              htmlFor="businessName"
-              error={errors.businessName?.message}
-            >
-              <Input id="businessName" {...register("businessName")} />
+            <FormField label="Organization name" htmlFor="name" error={errors.name?.message}>
+              <Input id="name" {...register("name")} />
+            </FormField>
+            <FormField label="Pharmacy chain" htmlFor="chainId" error={errors.chainId?.message} hint="Leave as Independent if not part of a chain.">
+              <Select id="chainId" {...register("chainId")}>
+                <option value="">Independent (no chain)</option>
+                {chains.map((c) => (
+                  <option key={c.id} value={c.id}>
+                    {c.name}
+                  </option>
+                ))}
+              </Select>
             </FormField>
             <FormField label="Description" htmlFor="description" error={errors.description?.message}>
               <Textarea id="description" rows={3} {...register("description")} />
             </FormField>
-            <FormField
-              label="Contact phone"
-              htmlFor="contactPhone"
-              error={errors.contactPhone?.message}
-            >
+            <FormField label="Contact phone" htmlFor="contactPhone" error={errors.contactPhone?.message}>
               <Input id="contactPhone" {...register("contactPhone")} />
             </FormField>
             <FormField

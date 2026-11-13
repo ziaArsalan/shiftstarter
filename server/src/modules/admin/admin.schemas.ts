@@ -1,8 +1,15 @@
 import { z } from "zod";
 
 export const listUsersQuery = z.object({
-  role: z.enum(["WORKER", "PHARMACY", "ADMIN"]).optional(),
+  platformRole: z.enum(["USER", "SUPER_ADMIN"]).optional(),
   status: z.enum(["ACTIVE", "SUSPENDED", "PENDING"]).optional(),
+  q: z.string().trim().max(200).optional(),
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+});
+
+export const listOrgsQuery = z.object({
+  q: z.string().trim().max(200).optional(),
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
 });

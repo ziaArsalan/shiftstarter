@@ -6,7 +6,9 @@ import { Button } from "../../components/Button";
 const nav = [
   { to: "/admin", label: "Dashboard", end: true },
   { to: "/admin/users", label: "Users" },
+  { to: "/admin/orgs", label: "Organizations" },
   { to: "/admin/credentials", label: "Credentials" },
+  { to: "/admin/chains", label: "Chains" },
 ];
 
 function linkClass({ isActive }: { isActive: boolean }) {
@@ -16,12 +18,12 @@ function linkClass({ isActive }: { isActive: boolean }) {
 }
 
 export function AdminLayout() {
-  const { user, logout } = useAuth();
+  const { me, signOut } = useAuth();
   const navigate = useNavigate();
   const [open, setOpen] = useState(false);
 
   async function handleLogout() {
-    await logout();
+    await signOut();
     navigate("/login", { replace: true });
   }
 
@@ -36,7 +38,9 @@ export function AdminLayout() {
             </span>
           </Link>
           <div className="hidden items-center gap-3 md:flex">
-            <span className="text-sm text-slate-500">{user?.email}</span>
+            <span className="max-w-[16rem] truncate text-sm text-slate-500">
+              {me?.profile?.email}
+            </span>
             <Button variant="secondary" onClick={handleLogout}>
               Log out
             </Button>

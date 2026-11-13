@@ -2,11 +2,19 @@ import { z } from "zod";
 
 const optionalTrimmed = (max: number) => z.string().trim().max(max).optional();
 
+export const workerRoleEnum = z.enum([
+  "PHARMACIST",
+  "PHARMACY_TECHNICIAN",
+  "PHARMACY_ASSISTANT",
+  "PHARMACY_STUDENT",
+]);
+
 export const updateWorkerProfileSchema = z.object({
-  firstName: z.string().trim().min(1).max(100).optional(),
-  lastName: z.string().trim().min(1).max(100).optional(),
+  // Profile-level fields (name/phone live on Profile, not WorkerProfile).
+  fullName: optionalTrimmed(200),
   phone: optionalTrimmed(40),
-  professionalTitle: optionalTrimmed(120),
+  // WorkerProfile fields.
+  workerRole: workerRoleEnum.optional(),
   licenseNumber: optionalTrimmed(120),
   yearsExperience: z.number().int().min(0).max(80).nullable().optional(),
   bio: z.string().trim().max(2000).optional(),

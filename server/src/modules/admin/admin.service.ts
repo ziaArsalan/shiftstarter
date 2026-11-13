@@ -1,22 +1,29 @@
-import type { Prisma, Role, UserStatus, VerificationStatus } from "@prisma/client";
+import type { Prisma, PlatformRole, UserStatus, VerificationStatus } from "@prisma/client";
 import { prisma } from "../../lib/prisma.js";
 import { AppError } from "../../lib/errors.js";
 
 interface ListUsersArgs {
-  role?: Role;
+  platformRole?: PlatformRole;
   status?: UserStatus;
+  q?: string;
   page: number;
   pageSize: number;
 }
 
 export async function listUsers(args: ListUsersArgs) {
-  const where: Prisma.UserWhereInput = {};
-  if (args.role) where.role = args.role;
+  const where: Prisma.ProfileWhereInput = {};
+  if (args.platformRole) where.platformRole = args.platformRole;
   if (args.status) where.status = args.status;
+  if (args.q) {
+    where.OR = [
+      { email: { contains: args.q, mode: "insensitive" } },
+      { fullName: { contains: args.q, mode: "insensitive" } },
+    ];
+  }
 
-  const [total, users] = await Promise.all([
-    prisma.user.count({ where }),
-    prisma.user.findMany({
+  const [total, profiles] = await Promise.all([
+    prisma.profile.count({ where }),
+    prisma.profile.findMany({
       where,
       orderBy: { createdAt: "desc" },
       skip: (args.page - 1) * args.pageSize,
@@ -24,27 +31,26 @@ export async function listUsers(args: ListUsersArgs) {
       select: {
         id: true,
         email: true,
-        role: true,
+        fullName: true,
+        platformRole: true,
         status: true,
-        emailVerified: true,
         createdAt: true,
-        workerProfile: { select: { firstName: true, lastName: true } },
-        pharmacyProfile: { select: { businessName: true } },
+        workerProfile: { select: { workerRole: true } },
+        _count: { select: { memberships: true } },
       },
     }),
   ]);
 
   return {
-    users: users.map((u) => ({
-      id: u.id,
-      email: u.email,
-      role: u.role,
-      status: u.status,
-      emailVerified: u.emailVerified,
-      createdAt: u.createdAt,
-      displayName: u.workerProfile
-        ? `${u.workerProfile.firstName} ${u.workerProfile.lastName}`.trim()
-        : (u.pharmacyProfile?.businessName ?? null),
+    users: profiles.map((p) => ({
+      id: p.id,
+      email: p.email,
+      fullName: p.fullName,
+      platformRole: p.platformRole,
+      status: p.status,
+      createdAt: p.createdAt,
+      workerRole: p.workerProfile?.workerRole ?? null,
+      orgCount: p._count.memberships,
     })),
     page: args.page,
     pageSize: args.pageSize,
@@ -56,24 +62,59 @@ export async function listUsers(args: ListUsersArgs) {
 export async function updateUserStatus(adminId: string, userId: string, status: UserStatus) {
   if (userId === adminId) throw AppError.forbidden("You cannot change your own account status");
 
-  const target = await prisma.user.findUnique({ where: { id: userId } });
+  const target = await prisma.profile.findUnique({ where: { id: userId } });
   if (!target) throw AppError.notFound("User not found");
-  if (target.role === "ADMIN") throw AppError.forbidden("Admin accounts cannot be modified here");
+  if (target.platformRole === "SUPER_ADMIN") {
+    throw AppError.forbidden("Super-admin accounts cannot be modified here");
+  }
 
-  const updated = await prisma.user.update({
+  return prisma.profile.update({
     where: { id: userId },
     data: { status },
-    select: { id: true, email: true, role: true, status: true },
+    select: { id: true, email: true, platformRole: true, status: true },
   });
+}
 
-  // Suspending a user revokes their active refresh tokens immediately.
-  if (status === "SUSPENDED") {
-    await prisma.refreshToken.updateMany({
-      where: { userId, revokedAt: null },
-      data: { revokedAt: new Date() },
-    });
-  }
-  return updated;
+interface ListOrgsArgs {
+  q?: string;
+  page: number;
+  pageSize: number;
+}
+
+export async function listOrgs(args: ListOrgsArgs) {
+  const where: Prisma.OrganizationWhereInput = {};
+  if (args.q) where.name = { contains: args.q, mode: "insensitive" };
+
+  const [total, orgs] = await Promise.all([
+    prisma.organization.count({ where }),
+    prisma.organization.findMany({
+      where,
+      orderBy: { createdAt: "desc" },
+      skip: (args.page - 1) * args.pageSize,
+      take: args.pageSize,
+      include: {
+        chain: { select: { id: true, name: true, logoUrl: true } },
+        _count: { select: { memberships: true, locations: true } },
+      },
+    }),
+  ]);
+
+  return {
+    orgs: orgs.map((o) => ({
+      id: o.id,
+      name: o.name,
+      type: o.type,
+      status: o.status,
+      createdAt: o.createdAt,
+      chain: o.chain,
+      memberCount: o._count.memberships,
+      locationCount: o._count.locations,
+    })),
+    page: args.page,
+    pageSize: args.pageSize,
+    total,
+    totalPages: Math.max(1, Math.ceil(total / args.pageSize)),
+  };
 }
 
 interface ListCredentialsArgs {
@@ -109,9 +150,8 @@ export async function listCredentials(args: ListCredentialsArgs) {
         worker: {
           select: {
             id: true,
-            firstName: true,
-            lastName: true,
-            user: { select: { id: true, email: true } },
+            workerRole: true,
+            profile: { select: { id: true, email: true, fullName: true } },
           },
         },
       },
@@ -134,8 +174,9 @@ export async function listCredentials(args: ListCredentialsArgs) {
       createdAt: c.createdAt,
       worker: {
         id: c.worker.id,
-        name: `${c.worker.firstName} ${c.worker.lastName}`.trim(),
-        email: c.worker.user.email,
+        workerRole: c.worker.workerRole,
+        name: c.worker.profile.fullName,
+        email: c.worker.profile.email,
       },
     })),
     page: args.page,

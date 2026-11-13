@@ -3,29 +3,34 @@ import { z } from "zod";
 
 /**
  * Environment configuration, validated once at startup (fail fast).
- * Defaults keep the server bootable in local dev; secrets never have defaults.
+ * Supabase powers Auth + Storage + managed Postgres (see docs/ARCHITECTURE.md §2).
+ * Secrets never have defaults.
  */
 const schema = z.object({
   NODE_ENV: z.enum(["development", "test", "production"]).default("development"),
   PORT: z.coerce.number().int().positive().default(4000),
-  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"),
   CLIENT_ORIGIN: z.string().url().default("http://localhost:5173"),
 
-  // Auth
-  JWT_ACCESS_SECRET: z.string().min(16, "JWT_ACCESS_SECRET must be set (>=16 chars)"),
-  JWT_REFRESH_SECRET: z.string().min(16, "JWT_REFRESH_SECRET must be set (>=16 chars)"),
-  JWT_ACCESS_TTL: z.string().default("15m"),
-  REFRESH_TTL_DAYS: z.coerce.number().int().positive().default(7),
-  REFRESH_COOKIE_NAME: z.string().default("ss_refresh"),
+  // Database (Supabase-managed Postgres)
+  DATABASE_URL: z.string().min(1, "DATABASE_URL is required"), // pooled (pgbouncer)
+  DIRECT_URL: z.string().min(1).optional(), // direct connection for migrations
 
-  // Storage / uploads
-  STORAGE_PROVIDER: z.enum(["local"]).default("local"),
-  UPLOAD_DIR: z.string().default("uploads"),
+  // Supabase Auth + Storage + Admin API
+  SUPABASE_URL: z.string().url("SUPABASE_URL must be a valid URL"),
+  SUPABASE_ANON_KEY: z.string().min(1, "SUPABASE_ANON_KEY is required"),
+  SUPABASE_SERVICE_ROLE_KEY: z.string().min(1, "SUPABASE_SERVICE_ROLE_KEY is required"),
+  SUPABASE_JWKS_URL: z.string().url("SUPABASE_JWKS_URL must be a valid URL"),
+
+  // Storage
+  STORAGE_PROVIDER: z.enum(["supabase", "local"]).default("supabase"),
+  CREDENTIALS_BUCKET: z.string().default("credentials"),
+  BRAND_ASSETS_BUCKET: z.string().default("brand-assets"),
+  UPLOAD_DIR: z.string().default("uploads"), // only used by the local provider
   MAX_UPLOAD_MB: z.coerce.number().int().positive().default(10),
 
-  // Admin seed (only required by prisma/seed.ts)
-  ADMIN_EMAIL: z.string().email().optional(),
-  ADMIN_PASSWORD: z.string().min(8).optional(),
+  // Super-admin seed (only required by prisma/seed.ts)
+  SUPER_ADMIN_EMAIL: z.string().email().optional(),
+  SUPER_ADMIN_PASSWORD: z.string().min(8).optional(),
 });
 
 const parsed = schema.safeParse(process.env);

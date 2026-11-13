@@ -32,9 +32,7 @@ export function CredentialQueuePage() {
       queryClient.invalidateQueries({ queryKey: ["admin-credentials"] });
       notify("Credential reviewed", "success");
     },
-    onError: (err) => {
-      notify(err instanceof ApiError ? err.message : "Review failed", "error");
-    },
+    onError: (err) => notify(err instanceof ApiError ? err.message : "Review failed", "error"),
   });
 
   async function handleView(id: string) {
@@ -83,7 +81,7 @@ export function CredentialQueuePage() {
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
                   <p className="font-semibold text-brand-navy">
-                    {c.type.replace("_", " ")} · {c.worker.name}
+                    {c.type.replace(/_/g, " ")} · {c.worker.name ?? c.worker.email}
                   </p>
                   <p className="text-sm text-slate-600">{c.worker.email}</p>
                   <p className="mt-1 text-xs text-slate-500">

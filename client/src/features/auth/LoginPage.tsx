@@ -1,8 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useLocation, useNavigate } from "react-router-dom";
-import { ApiError } from "../../lib/api";
+import { Link, useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { FormField } from "../../components/FormField";
@@ -12,9 +11,8 @@ import { dashboardPathFor } from "./guards";
 import { loginSchema, type LoginForm } from "./auth.schemas";
 
 export function LoginPage() {
-  const { login } = useAuth();
+  const { signIn, refreshMe } = useAuth();
   const navigate = useNavigate();
-  const location = useLocation();
   const [formError, setFormError] = useState<string | null>(null);
 
   const {
@@ -26,11 +24,13 @@ export function LoginPage() {
   async function onSubmit(values: LoginForm) {
     setFormError(null);
     try {
-      const user = await login(values.email, values.password);
-      const from = (location.state as { from?: string } | null)?.from;
-      navigate(from ?? dashboardPathFor(user.role), { replace: true });
+      await signIn(values.email, values.password);
+      const me = await refreshMe();
+      navigate(dashboardPathFor(me?.capabilities), { replace: true });
     } catch (err) {
-      setFormError(err instanceof ApiError ? err.message : "Unable to log in. Please try again.");
+      setFormError(
+        err instanceof Error ? err.message : "Unable to log in. Please check your details.",
+      );
     }
   }
 
@@ -62,6 +62,11 @@ export function LoginPage() {
                 {...register("password")}
               />
             </FormField>
+            <div className="text-right">
+              <Link to="/forgot-password" className="text-xs font-semibold text-brand-blue hover:underline">
+                Forgot password?
+              </Link>
+            </div>
             <Button type="submit" className="w-full" loading={isSubmitting}>
               Log in
             </Button>

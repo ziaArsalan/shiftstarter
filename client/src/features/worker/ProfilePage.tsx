@@ -6,16 +6,18 @@ import { applyApiError } from "../../lib/formErrors";
 import { Button } from "../../components/Button";
 import { Card, CardTitle } from "../../components/Card";
 import { FormField } from "../../components/FormField";
-import { Input, Textarea } from "../../components/Input";
+import { Input, Select, Textarea } from "../../components/Input";
 import { Spinner } from "../../components/Spinner";
 import { useToast } from "../../components/Toast";
-import type { WorkerProfile } from "../../lib/types";
+import { useAuth } from "../auth/AuthContext";
+import { WORKER_ROLE_LABELS, type WorkerProfile, type WorkerRole } from "../../lib/types";
+
+const WORKER_ROLES = Object.keys(WORKER_ROLE_LABELS) as WorkerRole[];
 
 type ProfileForm = {
-  firstName: string;
-  lastName: string;
+  fullName: string;
   phone: string;
-  professionalTitle: string;
+  workerRole: WorkerRole;
   licenseNumber: string;
   yearsExperience: string;
   hourlyRateExpectation: string;
@@ -28,10 +30,9 @@ type ProfileForm = {
 };
 
 const FIELDS: Array<keyof ProfileForm> = [
-  "firstName",
-  "lastName",
+  "fullName",
   "phone",
-  "professionalTitle",
+  "workerRole",
   "licenseNumber",
   "yearsExperience",
   "hourlyRateExpectation",
@@ -45,10 +46,9 @@ const FIELDS: Array<keyof ProfileForm> = [
 
 function toForm(p: WorkerProfile): ProfileForm {
   return {
-    firstName: p.firstName ?? "",
-    lastName: p.lastName ?? "",
+    fullName: p.fullName ?? "",
     phone: p.phone ?? "",
-    professionalTitle: p.professionalTitle ?? "",
+    workerRole: p.workerRole,
     licenseNumber: p.licenseNumber ?? "",
     yearsExperience: p.yearsExperience == null ? "" : String(p.yearsExperience),
     hourlyRateExpectation: p.hourlyRateExpectation == null ? "" : String(p.hourlyRateExpectation),
@@ -65,10 +65,9 @@ function toPayload(v: ProfileForm) {
   const str = (s: string) => (s.trim() === "" ? undefined : s.trim());
   const num = (s: string) => (s.trim() === "" ? null : Number(s));
   return {
-    firstName: str(v.firstName),
-    lastName: str(v.lastName),
+    fullName: str(v.fullName),
     phone: str(v.phone),
-    professionalTitle: str(v.professionalTitle),
+    workerRole: v.workerRole,
     licenseNumber: str(v.licenseNumber),
     yearsExperience: num(v.yearsExperience),
     hourlyRateExpectation: num(v.hourlyRateExpectation),
@@ -84,6 +83,7 @@ function toPayload(v: ProfileForm) {
 export function WorkerProfilePage() {
   const queryClient = useQueryClient();
   const { notify } = useToast();
+  const { refreshMe } = useAuth();
   const [formError, setFormError] = useState<string | null>(null);
 
   const { data, isLoading } = useQuery({
@@ -106,9 +106,10 @@ export function WorkerProfilePage() {
   const mutation = useMutation({
     mutationFn: (payload: ReturnType<typeof toPayload>) =>
       api<{ profile: WorkerProfile }>("/workers/me/profile", { method: "PUT", body: payload }),
-    onSuccess: (res) => {
+    onSuccess: async (res) => {
       queryClient.setQueryData(["worker-profile"], res);
       notify("Profile saved", "success");
+      await refreshMe();
     },
   });
 
@@ -144,21 +145,20 @@ export function WorkerProfilePage() {
         <Card>
           <CardTitle>Basics</CardTitle>
           <div className="mt-4 grid gap-4 sm:grid-cols-2">
-            <FormField label="First name" htmlFor="firstName" error={errors.firstName?.message}>
-              <Input id="firstName" {...register("firstName")} />
-            </FormField>
-            <FormField label="Last name" htmlFor="lastName" error={errors.lastName?.message}>
-              <Input id="lastName" {...register("lastName")} />
+            <FormField label="Full name" htmlFor="fullName" error={errors.fullName?.message}>
+              <Input id="fullName" {...register("fullName")} />
             </FormField>
             <FormField label="Phone" htmlFor="phone" error={errors.phone?.message}>
               <Input id="phone" {...register("phone")} />
             </FormField>
-            <FormField
-              label="Professional title"
-              htmlFor="professionalTitle"
-              error={errors.professionalTitle?.message}
-            >
-              <Input id="professionalTitle" {...register("professionalTitle")} />
+            <FormField label="Role" htmlFor="workerRole" error={errors.workerRole?.message}>
+              <Select id="workerRole" {...register("workerRole")}>
+                {WORKER_ROLES.map((r) => (
+                  <option key={r} value={r}>
+                    {WORKER_ROLE_LABELS[r]}
+                  </option>
+                ))}
+              </Select>
             </FormField>
             <FormField
               label="License number"
@@ -172,12 +172,7 @@ export function WorkerProfilePage() {
               htmlFor="yearsExperience"
               error={errors.yearsExperience?.message}
             >
-              <Input
-                id="yearsExperience"
-                type="number"
-                min={0}
-                {...register("yearsExperience")}
-              />
+              <Input id="yearsExperience" type="number" min={0} {...register("yearsExperience")} />
             </FormField>
             <FormField
               label="Hourly rate expectation"

@@ -4,26 +4,34 @@ import { api, ApiError } from "../../lib/api";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { Badge } from "../../components/Badge";
-import { Select } from "../../components/Input";
+import { Input, Select } from "../../components/Input";
 import { Spinner } from "../../components/Spinner";
 import { useToast } from "../../components/Toast";
 import { useAuth } from "../auth/AuthContext";
-import type { AdminUserRow, Paged, Role, UserStatus } from "../../lib/types";
+import {
+  WORKER_ROLE_LABELS,
+  type AdminUserRow,
+  type Paged,
+  type PlatformRole,
+  type UserStatus,
+} from "../../lib/types";
 
 export function UsersPage() {
   const queryClient = useQueryClient();
   const { notify } = useToast();
-  const { user: currentUser } = useAuth();
-  const [role, setRole] = useState<Role | "">("");
+  const { me } = useAuth();
+  const [platformRole, setPlatformRole] = useState<PlatformRole | "">("");
   const [status, setStatus] = useState<UserStatus | "">("");
+  const [q, setQ] = useState("");
   const [page, setPage] = useState(1);
 
   const params = new URLSearchParams({ page: String(page), pageSize: "20" });
-  if (role) params.set("role", role);
+  if (platformRole) params.set("platformRole", platformRole);
   if (status) params.set("status", status);
+  if (q.trim()) params.set("q", q.trim());
 
   const { data, isLoading } = useQuery({
-    queryKey: ["admin-users", { role, status, page }],
+    queryKey: ["admin-users", { platformRole, status, q, page }],
     queryFn: () => api<Paged<AdminUserRow>>(`/admin/users?${params.toString()}`),
   });
 
@@ -34,9 +42,7 @@ export function UsersPage() {
       queryClient.invalidateQueries({ queryKey: ["admin-users"] });
       notify("User status updated", "success");
     },
-    onError: (err) => {
-      notify(err instanceof ApiError ? err.message : "Update failed", "error");
-    },
+    onError: (err) => notify(err instanceof ApiError ? err.message : "Update failed", "error"),
   });
 
   const users = data?.users ?? [];
@@ -46,20 +52,30 @@ export function UsersPage() {
       <h1 className="text-2xl font-bold text-brand-navy">Users</h1>
 
       <Card>
-        <div className="flex flex-wrap gap-4">
-          <div className="w-40">
-            <label className="mb-1 block text-xs font-medium text-slate-500">Role</label>
-            <Select
-              value={role}
+        <div className="flex flex-wrap items-end gap-4">
+          <div className="w-48">
+            <label className="mb-1 block text-xs font-medium text-slate-500">Search</label>
+            <Input
+              placeholder="Name or email"
+              value={q}
               onChange={(e) => {
                 setPage(1);
-                setRole(e.target.value as Role | "");
+                setQ(e.target.value);
+              }}
+            />
+          </div>
+          <div className="w-44">
+            <label className="mb-1 block text-xs font-medium text-slate-500">Platform role</label>
+            <Select
+              value={platformRole}
+              onChange={(e) => {
+                setPage(1);
+                setPlatformRole(e.target.value as PlatformRole | "");
               }}
             >
-              <option value="">All roles</option>
-              <option value="WORKER">Worker</option>
-              <option value="PHARMACY">Pharmacy</option>
-              <option value="ADMIN">Admin</option>
+              <option value="">All</option>
+              <option value="USER">User</option>
+              <option value="SUPER_ADMIN">Super admin</option>
             </Select>
           </div>
           <div className="w-40">
@@ -71,7 +87,7 @@ export function UsersPage() {
                 setStatus(e.target.value as UserStatus | "");
               }}
             >
-              <option value="">All statuses</option>
+              <option value="">All</option>
               <option value="ACTIVE">Active</option>
               <option value="SUSPENDED">Suspended</option>
               <option value="PENDING">Pending</option>
@@ -94,22 +110,27 @@ export function UsersPage() {
                 <tr className="border-b border-slate-200 text-xs uppercase text-slate-500">
                   <th className="py-2 pr-4">Name</th>
                   <th className="py-2 pr-4">Email</th>
-                  <th className="py-2 pr-4">Role</th>
+                  <th className="py-2 pr-4">Type</th>
                   <th className="py-2 pr-4">Status</th>
                   <th className="py-2 pr-4 text-right">Action</th>
                 </tr>
               </thead>
               <tbody>
                 {users.map((u) => {
-                  const isSelf = u.id === currentUser?.id;
-                  const isAdmin = u.role === "ADMIN";
+                  const isSelf = u.id === me?.profile?.id;
+                  const isAdmin = u.platformRole === "SUPER_ADMIN";
+                  const type = isAdmin
+                    ? "Super admin"
+                    : u.workerRole
+                      ? WORKER_ROLE_LABELS[u.workerRole]
+                      : u.orgCount > 0
+                        ? "Org member"
+                        : "—";
                   return (
                     <tr key={u.id} className="border-b border-slate-100">
-                      <td className="py-3 pr-4 font-medium text-brand-navy">
-                        {u.displayName ?? "—"}
-                      </td>
+                      <td className="py-3 pr-4 font-medium text-brand-navy">{u.fullName ?? "—"}</td>
                       <td className="py-3 pr-4 text-slate-600">{u.email}</td>
-                      <td className="py-3 pr-4 text-slate-600">{u.role}</td>
+                      <td className="py-3 pr-4 text-slate-600">{type}</td>
                       <td className="py-3 pr-4">
                         <Badge status={u.status} />
                       </td>
@@ -148,11 +169,7 @@ export function UsersPage() {
               Page {data.page} of {data.totalPages}
             </span>
             <div className="flex gap-2">
-              <Button
-                variant="secondary"
-                disabled={page <= 1}
-                onClick={() => setPage((p) => p - 1)}
-              >
+              <Button variant="secondary" disabled={page <= 1} onClick={() => setPage((p) => p - 1)}>
                 Previous
               </Button>
               <Button

@@ -26,7 +26,7 @@ export class LocalStorageProvider implements StorageProvider {
     await fsp.writeFile(full, data);
   }
 
-  createReadStream(key: string): Readable {
+  async createReadStream(key: string): Promise<Readable> {
     return fs.createReadStream(this.resolve(key));
   }
 

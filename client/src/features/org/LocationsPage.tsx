@@ -85,11 +85,11 @@ function LocationEditor({
     };
     try {
       if (editingId) {
-        await api(`/pharmacies/me/locations/${editingId}`, { method: "PUT", body: payload });
+        await api(`/orgs/me/locations/${editingId}`, { method: "PUT", body: payload });
       } else {
-        await api("/pharmacies/me/locations", { method: "POST", body: payload });
+        await api("/orgs/me/locations", { method: "POST", body: payload });
       }
-      queryClient.invalidateQueries({ queryKey: ["pharmacy-locations"] });
+      queryClient.invalidateQueries({ queryKey: ["org-locations"] });
       notify(editingId ? "Location updated" : "Location added", "success");
       onClose();
     } catch (err) {
@@ -157,14 +157,14 @@ export function LocationsPage() {
   const [editor, setEditor] = useState<{ id: string | null; initial: LocationForm } | null>(null);
 
   const { data, isLoading } = useQuery({
-    queryKey: ["pharmacy-locations"],
-    queryFn: () => api<{ locations: PharmacyLocation[] }>("/pharmacies/me/locations"),
+    queryKey: ["org-locations"],
+    queryFn: () => api<{ locations: PharmacyLocation[] }>("/orgs/me/locations"),
   });
 
   const deleteMutation = useMutation({
-    mutationFn: (id: string) => api(`/pharmacies/me/locations/${id}`, { method: "DELETE" }),
+    mutationFn: (id: string) => api(`/orgs/me/locations/${id}`, { method: "DELETE" }),
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ["pharmacy-locations"] });
+      queryClient.invalidateQueries({ queryKey: ["org-locations"] });
       notify("Location deleted", "info");
     },
   });

@@ -1,7 +1,7 @@
 import { Router } from "express";
 import { asyncHandler } from "../../lib/errors.js";
 import { requireAuth } from "../../middleware/auth.js";
-import { requireRole } from "../../middleware/rbac.js";
+import { requireProfile, requireWorker } from "../../middleware/rbac.js";
 import { validate } from "../../middleware/validate.js";
 import { uploadSingle } from "../../middleware/upload.js";
 import * as controller from "./workers.controller.js";
@@ -13,37 +13,34 @@ import {
 
 export const workersRouter = Router();
 
-// All worker routes require authentication.
-workersRouter.use(requireAuth);
+workersRouter.use(requireAuth, requireProfile);
 
-const workerOnly = requireRole("WORKER");
-
-workersRouter.get("/me/profile", workerOnly, asyncHandler(controller.getProfile));
+workersRouter.get("/me/profile", requireWorker, asyncHandler(controller.getProfile));
 workersRouter.put(
   "/me/profile",
-  workerOnly,
+  requireWorker,
   validate({ body: updateWorkerProfileSchema }),
   asyncHandler(controller.updateProfile),
 );
 
-workersRouter.get("/me/credentials", workerOnly, asyncHandler(controller.listCredentials));
+workersRouter.get("/me/credentials", requireWorker, asyncHandler(controller.listCredentials));
 workersRouter.post(
   "/me/credentials",
-  workerOnly,
+  requireWorker,
   uploadSingle,
   validate({ body: createCredentialSchema }),
   asyncHandler(controller.createCredential),
 );
 workersRouter.delete(
   "/me/credentials/:id",
-  workerOnly,
+  requireWorker,
   validate({ params: credentialIdParams }),
   asyncHandler(controller.deleteCredential),
 );
-// Download is owner-or-admin; the service enforces ownership, admins may view for review.
+// Download is owner-or-super-admin; the service enforces ownership, super
+// admins may view for credential review.
 workersRouter.get(
   "/me/credentials/:id/file",
-  requireRole("WORKER", "ADMIN"),
   validate({ params: credentialIdParams }),
   asyncHandler(controller.downloadCredential),
 );

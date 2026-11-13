@@ -8,100 +8,138 @@ import {
   useState,
   type ReactNode,
 } from "react";
-import { api, setAccessToken, setUnauthorizedHandler } from "../../lib/api";
-import type { AuthUser, Role } from "../../lib/types";
+import type { Session } from "@supabase/supabase-js";
+import { supabase } from "../../lib/supabase";
+import { api } from "../../lib/api";
+import type { MeResponse } from "../../lib/types";
 
-interface RegisterPayload {
-  email: string;
-  password: string;
-  role: Exclude<Role, "ADMIN">;
-  firstName?: string;
-  lastName?: string;
-  businessName?: string;
+export interface BootstrapPayload {
+  intent: "worker" | "pharmacy";
+  fullName?: string;
+  phone?: string;
+  workerRole?: string;
+  organizationName?: string;
+  chainId?: string;
 }
 
 interface AuthContextValue {
-  user: AuthUser | null;
-  role: Role | null;
+  session: Session | null;
+  me: MeResponse | null;
   initializing: boolean;
-  login: (email: string, password: string) => Promise<AuthUser>;
-  register: (payload: RegisterPayload) => Promise<AuthUser>;
-  logout: () => Promise<void>;
-  refreshUser: () => Promise<void>;
+  signIn: (email: string, password: string) => Promise<void>;
+  signUp: (
+    email: string,
+    password: string,
+  ) => Promise<{ needsEmailConfirmation: boolean }>;
+  bootstrap: (payload: BootstrapPayload) => Promise<MeResponse>;
+  signOut: () => Promise<void>;
+  resetPassword: (email: string) => Promise<void>;
+  updatePassword: (newPassword: string) => Promise<void>;
+  refreshMe: () => Promise<MeResponse | null>;
 }
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [user, setUser] = useState<AuthUser | null>(null);
+  const [session, setSession] = useState<Session | null>(null);
+  const [me, setMe] = useState<MeResponse | null>(null);
   const [initializing, setInitializing] = useState(true);
-  const bootstrapped = useRef(false);
+  const loadedForUser = useRef<string | null>(null);
 
-  const clearSession = useCallback(() => {
-    setAccessToken(null);
-    setUser(null);
-  }, []);
-
-  const login = useCallback(async (email: string, password: string) => {
-    const data = await api<{ user: AuthUser; accessToken: string }>("/auth/login", {
-      method: "POST",
-      body: { email, password },
-      skipRefresh: true,
-    });
-    setAccessToken(data.accessToken);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
-  const register = useCallback(async (payload: RegisterPayload) => {
-    const data = await api<{ user: AuthUser; accessToken: string }>("/auth/register", {
-      method: "POST",
-      body: payload,
-      skipRefresh: true,
-    });
-    setAccessToken(data.accessToken);
-    setUser(data.user);
-    return data.user;
-  }, []);
-
-  const logout = useCallback(async () => {
+  const fetchMe = useCallback(async (): Promise<MeResponse | null> => {
     try {
-      await api("/auth/logout", { method: "POST", body: {}, skipRefresh: true });
-    } finally {
-      clearSession();
+      const data = await api<MeResponse>("/auth/me");
+      setMe(data);
+      return data;
+    } catch {
+      setMe(null);
+      return null;
     }
-  }, [clearSession]);
-
-  const refreshUser = useCallback(async () => {
-    const data = await api<{ user: AuthUser }>("/auth/me");
-    setUser(data.user);
   }, []);
 
-  // On an expired/invalid session mid-flight, drop back to logged-out.
+  // Track the Supabase session; (re)load /auth/me when the user changes.
   useEffect(() => {
-    setUnauthorizedHandler(() => setUser(null));
-    return () => setUnauthorizedHandler(null);
-  }, []);
+    let active = true;
 
-  // Bootstrap: try to restore the session via the refresh cookie.
-  useEffect(() => {
-    if (bootstrapped.current) return;
-    bootstrapped.current = true;
-    (async () => {
-      try {
-        const data = await api<{ user: AuthUser }>("/auth/me");
-        setUser(data.user);
-      } catch {
-        clearSession();
-      } finally {
-        setInitializing(false);
+    supabase.auth.getSession().then(async ({ data }) => {
+      if (!active) return;
+      setSession(data.session);
+      if (data.session) {
+        loadedForUser.current = data.session.user.id;
+        await fetchMe();
       }
-    })();
-  }, [clearSession]);
+      setInitializing(false);
+    });
+
+    const { data: sub } = supabase.auth.onAuthStateChange(async (_event, nextSession) => {
+      if (!active) return;
+      setSession(nextSession);
+      const userId = nextSession?.user.id ?? null;
+      if (userId && userId !== loadedForUser.current) {
+        loadedForUser.current = userId;
+        await fetchMe();
+      } else if (!userId) {
+        loadedForUser.current = null;
+        setMe(null);
+      }
+    });
+
+    return () => {
+      active = false;
+      sub.subscription.unsubscribe();
+    };
+  }, [fetchMe]);
+
+  const signIn = useCallback(async (email: string, password: string) => {
+    const { error } = await supabase.auth.signInWithPassword({ email, password });
+    if (error) throw error;
+  }, []);
+
+  const signUp = useCallback(async (email: string, password: string) => {
+    const { data, error } = await supabase.auth.signUp({ email, password });
+    if (error) throw error;
+    // No session returned => the project requires email confirmation.
+    return { needsEmailConfirmation: !data.session };
+  }, []);
+
+  const bootstrap = useCallback(async (payload: BootstrapPayload) => {
+    const data = await api<MeResponse>("/auth/bootstrap", { method: "POST", body: payload });
+    setMe(data);
+    return data;
+  }, []);
+
+  const signOut = useCallback(async () => {
+    await supabase.auth.signOut();
+    setMe(null);
+    loadedForUser.current = null;
+  }, []);
+
+  const resetPassword = useCallback(async (email: string) => {
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: `${window.location.origin}/reset-password`,
+    });
+    if (error) throw error;
+  }, []);
+
+  const updatePassword = useCallback(async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    if (error) throw error;
+  }, []);
 
   const value = useMemo<AuthContextValue>(
-    () => ({ user, role: user?.role ?? null, initializing, login, register, logout, refreshUser }),
-    [user, initializing, login, register, logout, refreshUser],
+    () => ({
+      session,
+      me,
+      initializing,
+      signIn,
+      signUp,
+      bootstrap,
+      signOut,
+      resetPassword,
+      updatePassword,
+      refreshMe: fetchMe,
+    }),
+    [session, me, initializing, signIn, signUp, bootstrap, signOut, resetPassword, updatePassword, fetchMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

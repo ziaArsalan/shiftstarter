@@ -4,15 +4,15 @@ import { dashboardPathFor } from "../features/auth/guards";
 import { Button } from "../components/Button";
 
 export function Landing() {
-  const { user } = useAuth();
+  const { session, me } = useAuth();
 
   return (
     <div className="min-h-screen bg-surface">
       <header className="mx-auto flex max-w-6xl items-center justify-between px-4 py-5">
         <img src="/shiftstarter-logo.png" alt="ShiftStarter" className="h-10 w-auto" />
         <nav className="flex items-center gap-3">
-          {user ? (
-            <Link to={dashboardPathFor(user.role)}>
+          {session ? (
+            <Link to={dashboardPathFor(me?.capabilities)}>
               <Button>Go to dashboard</Button>
             </Link>
           ) : (
@@ -40,12 +40,12 @@ export function Landing() {
           find shifts, fill shifts, and manage credentials in one place.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Link to="/register?role=WORKER">
+          <Link to="/register?intent=worker">
             <Button className="w-full sm:w-auto">I&apos;m looking for shifts</Button>
           </Link>
-          <Link to="/register?role=PHARMACY">
+          <Link to="/register?intent=pharmacy">
             <Button variant="secondary" className="w-full sm:w-auto">
-              I&apos;m hiring
+              I run a pharmacy
             </Button>
           </Link>
         </div>

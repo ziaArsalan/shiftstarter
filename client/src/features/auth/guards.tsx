@@ -1,49 +1,78 @@
 import type { ReactNode } from "react";
 import { Navigate, useLocation } from "react-router-dom";
 import { Spinner } from "../../components/Spinner";
-import type { Role } from "../../lib/types";
+import type { Capabilities } from "../../lib/types";
 import { useAuth } from "./AuthContext";
 
-/** Landing route for a given role after login. */
-export function dashboardPathFor(role: Role): string {
-  switch (role) {
-    case "WORKER":
-      return "/worker";
-    case "PHARMACY":
-      return "/pharmacy";
-    case "ADMIN":
-      return "/admin";
-  }
+/** Landing route after login, derived from resolved capabilities. */
+export function dashboardPathFor(capabilities?: Capabilities | null): string {
+  if (!capabilities) return "/login";
+  if (!capabilities.provisioned) return "/onboarding";
+  if (capabilities.isSuperAdmin) return "/admin";
+  if (capabilities.isOrgOwner || capabilities.isOrgManager) return "/org";
+  if (capabilities.isWorker) return "/worker";
+  return "/onboarding";
+}
+
+function FullScreenSpinner() {
+  return (
+    <div className="flex min-h-screen items-center justify-center">
+      <Spinner />
+    </div>
+  );
 }
 
 export function RequireAuth({ children }: { children: ReactNode }) {
-  const { user, initializing } = useAuth();
+  const { session, initializing } = useAuth();
   const location = useLocation();
 
-  if (initializing) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Spinner />
-      </div>
-    );
-  }
-  if (!user) {
+  if (initializing) return <FullScreenSpinner />;
+  if (!session) {
     return <Navigate to="/login" replace state={{ from: location.pathname }} />;
   }
   return <>{children}</>;
 }
 
-export function RequireRole({ roles, children }: { roles: Role[]; children: ReactNode }) {
-  const { user, initializing } = useAuth();
+/** Require a provisioned Profile; otherwise send to onboarding. */
+export function RequireProvisioned({ children }: { children: ReactNode }) {
+  const { session, me, initializing } = useAuth();
+  if (initializing) return <FullScreenSpinner />;
+  if (!session) return <Navigate to="/login" replace />;
+  if (!me?.capabilities.provisioned) return <Navigate to="/onboarding" replace />;
+  return <>{children}</>;
+}
 
-  if (initializing) {
-    return (
-      <div className="flex min-h-screen items-center justify-center">
-        <Spinner />
-      </div>
-    );
+export function RequireSuperAdmin({ children }: { children: ReactNode }) {
+  const { session, me, initializing } = useAuth();
+  if (initializing) return <FullScreenSpinner />;
+  if (!session) return <Navigate to="/login" replace />;
+  if (!me?.capabilities.isSuperAdmin) return <Navigate to="/forbidden" replace />;
+  return <>{children}</>;
+}
+
+export function RequireWorker({ children }: { children: ReactNode }) {
+  const { session, me, initializing } = useAuth();
+  if (initializing) return <FullScreenSpinner />;
+  if (!session) return <Navigate to="/login" replace />;
+  if (!me?.capabilities.isWorker) return <Navigate to="/forbidden" replace />;
+  return <>{children}</>;
+}
+
+export function RequireOrg({ children }: { children: ReactNode }) {
+  const { session, me, initializing } = useAuth();
+  if (initializing) return <FullScreenSpinner />;
+  if (!session) return <Navigate to="/login" replace />;
+  if (!me?.capabilities.isOrgOwner && !me?.capabilities.isOrgManager) {
+    return <Navigate to="/forbidden" replace />;
   }
-  if (!user) return <Navigate to="/login" replace />;
-  if (!roles.includes(user.role)) return <Navigate to="/forbidden" replace />;
+  return <>{children}</>;
+}
+
+/** Owner-only pages (members, billing). */
+export function RequireOrgOwner({ children }: { children: ReactNode }) {
+  const { session, me, initializing } = useAuth();
+  if (initializing) return <FullScreenSpinner />;
+  if (!session) return <Navigate to="/login" replace />;
+  if (!me?.capabilities.isOrgOwner) return <Navigate to="/forbidden" replace />;
   return <>{children}</>;
 }

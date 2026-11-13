@@ -1,10 +1,10 @@
-import type { Role } from "@prisma/client";
+import type { AuthContext } from "../middleware/auth.js";
 
 declare global {
   namespace Express {
     interface Request {
-      /** Populated by requireAuth from a verified access token. */
-      user?: { id: string; role: Role };
+      /** Populated by requireAuth after verifying the Supabase access token. */
+      auth?: AuthContext;
     }
   }
 }

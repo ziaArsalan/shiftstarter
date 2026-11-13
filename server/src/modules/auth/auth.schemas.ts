@@ -1,44 +1,37 @@
 import { z } from "zod";
 
-export const emailField = z
-  .string()
-  .trim()
-  .email("Enter a valid email address")
-  .transform((v) => v.toLowerCase());
+export const workerRoleEnum = z.enum([
+  "PHARMACIST",
+  "PHARMACY_TECHNICIAN",
+  "PHARMACY_ASSISTANT",
+  "PHARMACY_STUDENT",
+]);
 
-export const passwordField = z.string().min(8, "Password must be at least 8 characters").max(200);
-
-// ADMIN can never self-register.
-export const registerSchema = z
+/**
+ * First-login provisioning. The Supabase user already exists; this creates the
+ * app-side Profile and, per sign-up intent, either a WorkerProfile or an
+ * Organization + owner Membership. Idempotent (see auth.service.ts).
+ */
+export const bootstrapSchema = z
   .object({
-    email: emailField,
-    password: passwordField,
-    role: z.enum(["WORKER", "PHARMACY"]),
-    firstName: z.string().trim().min(1).max(100).optional(),
-    lastName: z.string().trim().min(1).max(100).optional(),
-    businessName: z.string().trim().min(1).max(200).optional(),
+    intent: z.enum(["worker", "pharmacy"]),
+    fullName: z.string().trim().min(1).max(200).optional(),
+    phone: z.string().trim().max(40).optional(),
+    workerRole: workerRoleEnum.optional(),
+    organizationName: z.string().trim().min(1).max(200).optional(),
+    chainId: z.string().trim().min(1).max(60).optional(),
   })
   .superRefine((data, ctx) => {
-    if (data.role === "WORKER") {
-      if (!data.firstName)
-        ctx.addIssue({ code: "custom", path: ["firstName"], message: "First name is required" });
-      if (!data.lastName)
-        ctx.addIssue({ code: "custom", path: ["lastName"], message: "Last name is required" });
+    if (data.intent === "worker" && !data.workerRole) {
+      ctx.addIssue({ code: "custom", path: ["workerRole"], message: "Worker role is required" });
     }
-    if (data.role === "PHARMACY" && !data.businessName) {
-      ctx.addIssue({ code: "custom", path: ["businessName"], message: "Business name is required" });
+    if (data.intent === "pharmacy" && !data.organizationName) {
+      ctx.addIssue({
+        code: "custom",
+        path: ["organizationName"],
+        message: "Organization name is required",
+      });
     }
   });
 
-export const loginSchema = z.object({
-  email: emailField,
-  password: z.string().min(1, "Password is required"),
-});
-
-// Refresh/logout accept the token from the cookie (preferred) or the body (mobile fallback).
-export const refreshBodySchema = z.object({
-  refreshToken: z.string().min(1).optional(),
-});
-
-export type RegisterInput = z.infer<typeof registerSchema>;
-export type LoginInput = z.infer<typeof loginSchema>;
+export type BootstrapInput = z.infer<typeof bootstrapSchema>;
