@@ -73,7 +73,7 @@ Chronological. Each: context → decision → why. Only significant decisions.
 - **New dependencies to approve before the M2 rebuild** — `@supabase/supabase-js`, `jose` (JWKS verify); remove `jsonwebtoken`, `argon2`/`bcryptjs`, `cookie-parser` from the M2 v1 set.
 - **Email + push notification providers** (M4) — note Supabase Auth covers auth emails; marketing/transactional email still open.
 - **Hosting provider** for the Node API in staging/production (M5); Supabase covers DB/Auth/Storage.
-- **PR-per-milestone vs direct commits to main** (confirm at first push).
+- ~~PR-per-milestone vs direct commits to main~~ — **decided 2026-11-17:** branch `M<n>` per milestone; no push/merge to `main` without the user's explicit permission (see GIT.md §Branching).
 
 ### User prerequisites (cannot be created by the build)
 - **Supabase project(s)** (staging + production) + URL, anon key, service-role key, DB connection strings.

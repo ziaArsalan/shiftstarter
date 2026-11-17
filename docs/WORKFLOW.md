@@ -25,7 +25,9 @@ FIX → RETEST → QA           (loop until pass; see Recovery limits) [bug-fixe
       ↓
 CHANGELOG                   (update CHANGELOG.md)              [git-publisher]
       ↓
-COMMIT → PUSH               (per GIT.md)                        [git-publisher]
+COMMIT → PUSH BRANCH M<n>   (per GIT.md; never main)            [git-publisher]
+      ↓
+MERGE TO main               ← only with the user's explicit permission
       ↓
 MARK MILESTONE done         (MILESTONES.md)
 ```

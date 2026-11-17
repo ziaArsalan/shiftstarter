@@ -18,6 +18,7 @@ Actions:
    - ID given and not `done` → use it (if `in_progress`, ask: resume or pick another).
    - No ID → apply the selection rules: among milestones whose **dependencies are all `done`**, pick highest priority (P0→P3) then lowest number. If none eligible, report and stop.
 3. Announce the chosen milestone and whether `--skip-qa` is active.
+4. Create/switch to the milestone branch `M<n>` from the latest `main` (see docs/GIT.md §Branching). All work for the milestone is committed there.
 
 ## Step 1 — Plan
 - Invoke **planner** (or **architect** for architecture-heavy milestones) with only: the milestone entry + architecture refs. It writes `plans/MILESTONE-N.md` and posts the `PLAN READY` summary.
@@ -38,7 +39,8 @@ Actions:
 - After approval: **bug-fixer** patches → **qa-tester** retests. Loop until PASS (recovery limit per WORKFLOW.md). Do not mark done until QA passes.
 
 ## Step 6 — Publish
-- Invoke **git-publisher**: update CHANGELOG → mark milestone `done` in MILESTONES.md → commit (Conventional Commits) → push. It verifies no secrets and stops if `gh` is unauthenticated.
+- Invoke **git-publisher**: update CHANGELOG → mark milestone `done` in MILESTONES.md → commit (Conventional Commits) on `M<n>` → push branch `M<n>`. It verifies no secrets and stops on remote/auth failure.
+- **Merge to `main` is NOT part of /start.** Tell the user `M<n>` is pushed and ask; only merge/push `main` with their explicit permission.
 
 ## Throughout
 - Honor `STOP` / `pause` / `resume` / `retry` / `skip` / `abort`.

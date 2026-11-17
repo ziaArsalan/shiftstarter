@@ -21,7 +21,8 @@ Durable, portable knowledge for any Claude session on any machine. Keep concise.
 ## Workflow
 - **Milestone/batch mode** (not granular tasks). Milestones M1–M5 in `MILESTONES.md`.
 - Run via `/start` / `/start M2` / `/start M2 --skip-qa`.
-- Pipeline: plan → **approve** → develop → QA → (bugs → **approve** → fix → retest) → changelog → commit → push. See `docs/WORKFLOW.md`.
+- Pipeline: plan → **approve** → develop → QA → (bugs → **approve** → fix → retest) → changelog → commit → push **branch `M<n>`**. See `docs/WORKFLOW.md`.
+- **Git rule (user, 2026-11-17):** every milestone on its own branch `M<n>`; **never push or merge to `main` without the user's explicit permission** for that push. M1 and M2 were pushed to `main` before this rule; branches `M1`/`M2` exist on origin.
 - Two approval gates on by default (`approval_required: true`); designed to be flippable later.
 
 ## Agent model tiers (cost policy)
