@@ -52,7 +52,20 @@ export function WorkerDashboard() {
         <Card>
           <CardTitle>Your profile</CardTitle>
           <p className="mb-4 text-sm text-slate-600">
-            Add your role, rate expectations, and location.
+            {me?.worker
+              ? [
+                  role ? WORKER_ROLE_LABELS[role] : null,
+                  me.worker.yearsExperience != null
+                    ? `${me.worker.yearsExperience} yrs experience`
+                    : null,
+                  [me.worker.city, me.worker.state].filter(Boolean).join(", ") || null,
+                  me.worker.hourlyRateExpectation != null
+                    ? `$${me.worker.hourlyRateExpectation}/hr`
+                    : null,
+                ]
+                  .filter(Boolean)
+                  .join(" · ")
+              : "Add your role, rate expectations, and location."}
           </p>
           <Link to="/worker/profile" className="text-sm font-semibold text-brand-blue hover:underline">
             Edit profile →

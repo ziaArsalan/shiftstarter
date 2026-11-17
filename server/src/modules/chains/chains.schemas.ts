@@ -1,4 +1,5 @@
 import { z } from "zod";
+import { httpUrl } from "../../lib/validation.js";
 
 export const createChainSchema = z.object({
   name: z.string().trim().min(1).max(160),
@@ -9,8 +10,8 @@ export const createChainSchema = z.object({
     .max(80)
     .regex(/^[a-z0-9-]+$/, "Slug may contain only lowercase letters, numbers, and hyphens")
     .optional(),
-  website: z.string().trim().url("Enter a valid URL").max(200).optional().or(z.literal("")),
-  logoUrl: z.string().trim().url().max(500).optional().or(z.literal("")),
+  website: httpUrl(200).optional().or(z.literal("")),
+  logoUrl: httpUrl(500).optional().or(z.literal("")),
 });
 
 export const updateChainSchema = createChainSchema.partial();

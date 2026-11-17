@@ -15,6 +15,7 @@ export function CredentialQueuePage() {
   const [status, setStatus] = useState<VerificationStatus>("PENDING");
   const [notes, setNotes] = useState<Record<string, string>>({});
   const [viewingId, setViewingId] = useState<string | null>(null);
+  const [noteErrors, setNoteErrors] = useState<Record<string, string>>({});
 
   const { data, isLoading } = useQuery({
     queryKey: ["admin-credentials", { status }],
@@ -28,12 +29,29 @@ export function CredentialQueuePage() {
         method: "PATCH",
         body: { action: vars.action, notes: vars.notes },
       }),
-    onSuccess: () => {
+    onSuccess: (_data, vars) => {
+      setNoteErrors((prev) => ({ ...prev, [vars.id]: "" }));
       queryClient.invalidateQueries({ queryKey: ["admin-credentials"] });
       notify("Credential reviewed", "success");
     },
-    onError: (err) => notify(err instanceof ApiError ? err.message : "Review failed", "error"),
+    onError: (err, vars) => {
+      const message = err instanceof ApiError ? err.message : "Review failed";
+      const detail =
+        err instanceof ApiError ? err.details?.find((d) => d.path === "notes")?.message : undefined;
+      setNoteErrors((prev) => ({ ...prev, [vars.id]: detail ?? message }));
+      notify(detail ?? message, "error");
+    },
   });
+
+  function handleReject(id: string) {
+    const note = (notes[id] ?? "").trim();
+    if (!note) {
+      setNoteErrors((prev) => ({ ...prev, [id]: "A note is required when rejecting" }));
+      return;
+    }
+    setNoteErrors((prev) => ({ ...prev, [id]: "" }));
+    mutation.mutate({ id, action: "reject", notes: note });
+  }
 
   async function handleView(id: string) {
     setViewingId(id);
@@ -105,14 +123,20 @@ export function CredentialQueuePage() {
                     rows={2}
                     placeholder="Review note (required to reject)"
                     value={notes[c.id] ?? ""}
-                    onChange={(e) => setNotes((prev) => ({ ...prev, [c.id]: e.target.value }))}
+                    onChange={(e) => {
+                      setNotes((prev) => ({ ...prev, [c.id]: e.target.value }));
+                      setNoteErrors((prev) => ({ ...prev, [c.id]: "" }));
+                    }}
                   />
+                  {noteErrors[c.id] && (
+                    <p role="alert" className="text-sm font-medium text-red-600">
+                      {noteErrors[c.id]}
+                    </p>
+                  )}
                   <div className="flex justify-end gap-3">
                     <Button
                       variant="danger"
-                      onClick={() =>
-                        mutation.mutate({ id: c.id, action: "reject", notes: notes[c.id] })
-                      }
+                      onClick={() => handleReject(c.id)}
                       loading={
                         mutation.isPending &&
                         mutation.variables?.id === c.id &&

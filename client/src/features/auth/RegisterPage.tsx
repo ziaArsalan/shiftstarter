@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate, useSearchParams } from "react-router-dom";
+import { Link, Navigate, useNavigate, useSearchParams } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { FormField } from "../../components/FormField";
@@ -15,7 +15,7 @@ import { registerSchema, type RegisterForm } from "./auth.schemas";
 const WORKER_ROLES = Object.keys(WORKER_ROLE_LABELS) as WorkerRole[];
 
 export function RegisterPage() {
-  const { signUp, bootstrap } = useAuth();
+  const { session, me: currentMe, initializing, signUp, bootstrap } = useAuth();
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
   const initialIntent = searchParams.get("intent") === "pharmacy" ? "pharmacy" : "worker";
@@ -35,11 +35,21 @@ export function RegisterPage() {
 
   const intent = watch("intent");
 
+  // Already logged in and provisioned: go straight to the dashboard.
+  if (!initializing && session && currentMe?.capabilities.provisioned) {
+    return <Navigate to={dashboardPathFor(currentMe.capabilities)} replace />;
+  }
+
   async function onSubmit(values: RegisterForm) {
     setFormError(null);
     setConfirmMsg(null);
     try {
-      const { needsEmailConfirmation } = await signUp(values.email, values.password);
+      const { needsEmailConfirmation } = await signUp(values.email, values.password, {
+        intent: values.intent,
+        fullName: values.fullName,
+        workerRole: values.workerRole,
+        organizationName: values.organizationName,
+      });
       if (needsEmailConfirmation) {
         setConfirmMsg(
           "Check your email to confirm your account, then log in to finish setting up.",

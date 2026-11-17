@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
-import { Link, useNavigate } from "react-router-dom";
+import { Link, Navigate, useNavigate } from "react-router-dom";
 import { Button } from "../../components/Button";
 import { Card } from "../../components/Card";
 import { FormField } from "../../components/FormField";
@@ -11,7 +11,7 @@ import { dashboardPathFor } from "./guards";
 import { loginSchema, type LoginForm } from "./auth.schemas";
 
 export function LoginPage() {
-  const { signIn, refreshMe } = useAuth();
+  const { session, me: currentMe, initializing, signIn, refreshMe } = useAuth();
   const navigate = useNavigate();
   const [formError, setFormError] = useState<string | null>(null);
 
@@ -21,12 +21,18 @@ export function LoginPage() {
     formState: { errors, isSubmitting },
   } = useForm<LoginForm>({ resolver: zodResolver(loginSchema) });
 
+  // Already logged in and provisioned: go straight to the dashboard.
+  if (!initializing && session && currentMe?.capabilities.provisioned) {
+    return <Navigate to={dashboardPathFor(currentMe.capabilities)} replace />;
+  }
+
   async function onSubmit(values: LoginForm) {
     setFormError(null);
     try {
       await signIn(values.email, values.password);
       const me = await refreshMe();
-      navigate(dashboardPathFor(me?.capabilities), { replace: true });
+      // If /auth/me failed, RequireAuth on the destination shows a retry state.
+      navigate(me ? dashboardPathFor(me.capabilities) : "/onboarding", { replace: true });
     } catch (err) {
       setFormError(
         err instanceof Error ? err.message : "Unable to log in. Please check your details.",

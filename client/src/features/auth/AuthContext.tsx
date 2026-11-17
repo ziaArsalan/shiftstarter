@@ -22,14 +22,25 @@ export interface BootstrapPayload {
   chainId?: string;
 }
 
+/** Sign-up choices persisted in Supabase user_metadata so they survive email confirmation. */
+export interface SignUpMetadata {
+  intent?: "worker" | "pharmacy";
+  fullName?: string;
+  workerRole?: string;
+  organizationName?: string;
+}
+
 interface AuthContextValue {
   session: Session | null;
   me: MeResponse | null;
+  /** True when the last /auth/me call failed (server/network), as opposed to "not provisioned". */
+  meError: boolean;
   initializing: boolean;
   signIn: (email: string, password: string) => Promise<void>;
   signUp: (
     email: string,
     password: string,
+    metadata?: SignUpMetadata,
   ) => Promise<{ needsEmailConfirmation: boolean }>;
   bootstrap: (payload: BootstrapPayload) => Promise<MeResponse>;
   signOut: () => Promise<void>;
@@ -43,6 +54,7 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [session, setSession] = useState<Session | null>(null);
   const [me, setMe] = useState<MeResponse | null>(null);
+  const [meError, setMeError] = useState(false);
   const [initializing, setInitializing] = useState(true);
   const loadedForUser = useRef<string | null>(null);
 
@@ -50,9 +62,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     try {
       const data = await api<MeResponse>("/auth/me");
       setMe(data);
+      setMeError(false);
       return data;
     } catch {
-      setMe(null);
+      // Keep any previously loaded `me`; flag the failure so the UI can offer a retry
+      // instead of treating the user as unprovisioned.
+      setMeError(true);
       return null;
     }
   }, []);
@@ -81,6 +96,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       } else if (!userId) {
         loadedForUser.current = null;
         setMe(null);
+        setMeError(false);
       }
     });
 
@@ -95,8 +111,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     if (error) throw error;
   }, []);
 
-  const signUp = useCallback(async (email: string, password: string) => {
-    const { data, error } = await supabase.auth.signUp({ email, password });
+  const signUp = useCallback(async (email: string, password: string, metadata?: SignUpMetadata) => {
+    const { data, error } = await supabase.auth.signUp({
+      email,
+      password,
+      options: metadata ? { data: metadata } : undefined,
+    });
     if (error) throw error;
     // No session returned => the project requires email confirmation.
     return { needsEmailConfirmation: !data.session };
@@ -111,6 +131,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const signOut = useCallback(async () => {
     await supabase.auth.signOut();
     setMe(null);
+    setMeError(false);
     loadedForUser.current = null;
   }, []);
 
@@ -130,6 +151,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     () => ({
       session,
       me,
+      meError,
       initializing,
       signIn,
       signUp,
@@ -139,7 +161,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       updatePassword,
       refreshMe: fetchMe,
     }),
-    [session, me, initializing, signIn, signUp, bootstrap, signOut, resetPassword, updatePassword, fetchMe],
+    [session, me, meError, initializing, signIn, signUp, bootstrap, signOut, resetPassword, updatePassword, fetchMe],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

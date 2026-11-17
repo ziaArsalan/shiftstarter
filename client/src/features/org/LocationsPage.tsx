@@ -218,7 +218,11 @@ export function LocationsPage() {
                   </Button>
                   <Button
                     variant="danger"
-                    onClick={() => deleteMutation.mutate(l.id)}
+                    onClick={() => {
+                      if (window.confirm(`Delete location "${l.name}"? This cannot be undone.`)) {
+                        deleteMutation.mutate(l.id);
+                      }
+                    }}
                     loading={deleteMutation.isPending && deleteMutation.variables === l.id}
                   >
                     Delete

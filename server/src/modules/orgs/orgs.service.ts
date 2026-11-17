@@ -32,7 +32,7 @@ export async function updateOrg(organizationId: string, input: UpdateOrgInput) {
   return prisma.organization.update({
     where: { id: organizationId },
     data,
-    include: { chain: true },
+    include: { chain: true, _count: { select: { memberships: true, locations: true } } },
   });
 }
 
@@ -59,6 +59,13 @@ export async function inviteMember(organizationId: string, input: InviteMemberIn
   if (!profile) {
     throw AppError.validation(
       "No ShiftStarter account uses that email yet. Ask them to sign up first.",
+    );
+  }
+
+  const workerProfile = await prisma.workerProfile.findUnique({ where: { profileId: profile.id } });
+  if (workerProfile) {
+    throw AppError.conflict(
+      "That account is registered as a pharmacy professional and cannot be added to an organization. Use a different email.",
     );
   }
 

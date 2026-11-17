@@ -23,7 +23,7 @@ Billing/scope map to the quotation ($2,200 total).
 ## M2 — Core Platform & Multi-Tenant Roles (Supabase rebuild)
 - **Priority:** P0
 - **Depends on:** M1
-- **Status:** in_progress — v1 (custom JWT auth, 3-role, local Postgres) committed as a **checkpoint** on 2026-11-12. **Rebuilding** on Supabase (Auth + RLS + Storage + SDK) with the multi-tenant SaaS role model per the 2026-11-12 client call. See DECISIONS.md ADR-008..ADR-012 and plans/MILESTONE-2.md.
+- **Status:** done (2026-11-17 — QA passed, committed & pushed to origin/main)
 - **Amount:** $550 (see commercial note — added scope)
 - **Goal:** Supabase auth + multi-tenant orgs/roles + profiles + credentials foundation.
 - **Scope:** Supabase Auth (sign-up/in/out, session, reset) via `supabase-js`; Express JWKS verification + RBAC; `Profile` provisioning; **Organizations + Memberships (OWNER/MANAGER)**; worker profiles (4 worker roles); org locations; credential upload on **Supabase Storage**; **super-admin portal shell** (users, orgs, credential queue); pharmacy-chain catalog (super-admin CRUD + selection); responsive web shell; schema migrated to Supabase + RLS policies live.

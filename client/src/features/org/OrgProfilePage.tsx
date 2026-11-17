@@ -41,9 +41,12 @@ export function OrgProfilePage() {
     register,
     handleSubmit,
     reset,
+    watch,
     setError,
     formState: { errors, isSubmitting },
   } = useForm<OrgForm>();
+
+  const selectedChainId = watch("chainId");
 
   useEffect(() => {
     if (data?.organization) {
@@ -95,6 +98,7 @@ export function OrgProfilePage() {
   }
 
   const chains = chainsQuery.data?.chains ?? [];
+  const selectedChain = chains.find((c) => c.id === selectedChainId);
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
@@ -123,6 +127,18 @@ export function OrgProfilePage() {
                   </option>
                 ))}
               </Select>
+              {selectedChain && (
+                <div className="mt-2 flex items-center gap-2">
+                  {selectedChain.logoUrl ? (
+                    <img
+                      src={selectedChain.logoUrl}
+                      alt={`${selectedChain.name} logo`}
+                      className="h-10 w-10 rounded object-contain"
+                    />
+                  ) : null}
+                  <span className="text-sm text-slate-600">{selectedChain.name}</span>
+                </div>
+              )}
             </FormField>
             <FormField label="Description" htmlFor="description" error={errors.description?.message}>
               <Textarea id="description" rows={3} {...register("description")} />

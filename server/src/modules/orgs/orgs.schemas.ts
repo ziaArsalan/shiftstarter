@@ -1,10 +1,11 @@
 import { z } from "zod";
+import { httpUrl } from "../../lib/validation.js";
 
 export const updateOrgSchema = z.object({
   name: z.string().trim().min(1).max(200).optional(),
   description: z.string().trim().max(2000).optional(),
   contactPhone: z.string().trim().max(40).optional(),
-  website: z.string().trim().url("Enter a valid URL").max(200).optional().or(z.literal("")),
+  website: httpUrl(200).optional().or(z.literal("")),
   // null clears the chain (independent pharmacy); a string selects a catalog chain.
   chainId: z.string().trim().min(1).max(60).nullable().optional(),
 });

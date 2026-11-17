@@ -1,7 +1,7 @@
 ---
 name: qa-tester
 description: Drives the live app with Playwright (interactive-driving) to verify the milestone's acceptance criteria. Returns PASS or a numbered bug list. Invoked at the QA step of /start.
-tools: Read, Bash, Glob, Grep
+tools: Read, Bash, Glob, Grep, mcp__playwright__*
 model: sonnet
 ---
 

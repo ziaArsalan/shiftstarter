@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { useForm } from "react-hook-form";
 import { zodResolver } from "@hookform/resolvers/zod";
 import { useNavigate } from "react-router-dom";
@@ -19,13 +19,15 @@ const onboardingSchema = z
     intent: z.enum(["worker", "pharmacy"]),
     fullName: z.string().trim().optional(),
     workerRole: z
-      .enum(["PHARMACIST", "PHARMACY_TECHNICIAN", "PHARMACY_ASSISTANT", "PHARMACY_STUDENT"])
+      .enum(["PHARMACIST", "PHARMACY_TECHNICIAN", "PHARMACY_ASSISTANT", "PHARMACY_STUDENT"], {
+        error: "Please select your role",
+      })
       .optional(),
     organizationName: z.string().trim().optional(),
   })
   .superRefine((data, ctx) => {
     if (data.intent === "worker" && !data.workerRole) {
-      ctx.addIssue({ code: "custom", path: ["workerRole"], message: "Select your role" });
+      ctx.addIssue({ code: "custom", path: ["workerRole"], message: "Please select your role" });
     }
     if (data.intent === "pharmacy" && !data.organizationName) {
       ctx.addIssue({
@@ -55,6 +57,35 @@ export function OnboardingPage() {
 
   const intent = watch("intent");
 
+  // Sign-up choices saved in Supabase user_metadata (survive email confirmation).
+  const meta = session?.user.user_metadata as
+    | { intent?: string; fullName?: string; workerRole?: string; organizationName?: string }
+    | undefined;
+  const autoTried = useRef(false);
+  const [autoSubmitting, setAutoSubmitting] = useState(false);
+
+  // Prefill from sign-up metadata; if it is complete, finish setup automatically.
+  useEffect(() => {
+    if (initializing || !session || !me || me.capabilities.provisioned || autoTried.current) return;
+    if (!meta) return;
+    autoTried.current = true;
+    const metaIntent = meta.intent === "pharmacy" ? "pharmacy" : meta.intent === "worker" ? "worker" : null;
+    if (!metaIntent) return;
+    const parsed = onboardingSchema.safeParse({
+      intent: metaIntent,
+      fullName: meta.fullName,
+      workerRole: meta.workerRole,
+      organizationName: meta.organizationName,
+    });
+    setValue("intent", metaIntent);
+    if (meta.fullName) setValue("fullName", meta.fullName);
+    if (meta.workerRole) setValue("workerRole", meta.workerRole as OnboardingForm["workerRole"]);
+    if (meta.organizationName) setValue("organizationName", meta.organizationName);
+    if (!parsed.success) return;
+    setAutoSubmitting(true);
+    void onSubmit(parsed.data).finally(() => setAutoSubmitting(false));
+  }, [initializing, session, me]);
+
   // Already provisioned? Skip onboarding.
   useEffect(() => {
     if (!initializing && me?.capabilities.provisioned) {
@@ -62,7 +93,7 @@ export function OnboardingPage() {
     }
   }, [initializing, me, navigate]);
 
-  if (initializing) {
+  if (initializing || autoSubmitting) {
     return (
       <div className="flex min-h-screen items-center justify-center">
         <Spinner />

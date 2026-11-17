@@ -13,7 +13,9 @@ export const registerSchema = z
     password: z.string().min(8, "Password must be at least 8 characters"),
     fullName: z.string().trim().optional(),
     workerRole: z
-      .enum(["PHARMACIST", "PHARMACY_TECHNICIAN", "PHARMACY_ASSISTANT", "PHARMACY_STUDENT"])
+      .enum(["PHARMACIST", "PHARMACY_TECHNICIAN", "PHARMACY_ASSISTANT", "PHARMACY_STUDENT"], {
+        error: "Please select your role",
+      })
       .optional(),
     organizationName: z.string().trim().optional(),
   })
@@ -22,7 +24,7 @@ export const registerSchema = z
       if (!data.fullName)
         ctx.addIssue({ code: "custom", path: ["fullName"], message: "Your name is required" });
       if (!data.workerRole)
-        ctx.addIssue({ code: "custom", path: ["workerRole"], message: "Select your role" });
+        ctx.addIssue({ code: "custom", path: ["workerRole"], message: "Please select your role" });
     }
     if (data.intent === "pharmacy" && !data.organizationName) {
       ctx.addIssue({

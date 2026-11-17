@@ -41,6 +41,14 @@ export async function bootstrap(auth: AuthContext, input: BootstrapInput) {
 
   if (input.intent === "worker") {
     const existing = await prisma.workerProfile.findUnique({ where: { profileId: auth.userId } });
+    if (!existing) {
+      const membershipCount = await prisma.membership.count({ where: { profileId: auth.userId } });
+      if (membershipCount > 0) {
+        throw AppError.conflict(
+          "This account is already registered with a pharmacy. Use a different email to register as a pharmacy professional.",
+        );
+      }
+    }
     await prisma.$transaction(async (tx) => {
       if (input.fullName || input.phone) {
         await tx.profile.update({
@@ -62,6 +70,14 @@ export async function bootstrap(auth: AuthContext, input: BootstrapInput) {
     const existingMembership = await prisma.membership.findFirst({
       where: { profileId: auth.userId },
     });
+    if (!existingMembership) {
+      const worker = await prisma.workerProfile.findUnique({ where: { profileId: auth.userId } });
+      if (worker) {
+        throw AppError.conflict(
+          "This account is already registered as a pharmacy professional. Use a different email to register a pharmacy.",
+        );
+      }
+    }
     await prisma.$transaction(async (tx) => {
       if (input.fullName || input.phone) {
         await tx.profile.update({
