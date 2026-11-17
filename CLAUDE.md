@@ -38,5 +38,5 @@ This file is the entry point only. **Do not duplicate content here — follow th
 
 ## Project facts
 
-- Source of truth for scope: `QUOTATION - Bobby Pharma APP (1).pdf` (5 milestones, $2,200, 6–8 weeks).
+- Source of truth for scope: `client-docs/QUOTATION - Bobby Pharma APP (1).pdf` (5 milestones, $2,200, 6–8 weeks).
 - Mobile app is **future** — backend stays API-driven so it can be reused. Do **not** build mobile now.

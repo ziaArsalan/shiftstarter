@@ -1,0 +1,4 @@
+/* ShiftStarter walkthrough decks: same look as the Milestone 1 deck.
+   Slides carry their styles inline (as in M1); this file holds only shared basics. */
+body { font-family: 'Inter', Arial, sans-serif; color: #0A1F3C; }
+section { box-sizing: border-box; }

@@ -6,7 +6,7 @@ Durable, portable knowledge for any Claude session on any machine. Keep concise.
 - Product: **ShiftStarter** (stylized "ShiftStarter AI"). Domain: **shiftstarter.ca**. Racing/"fast start" brand (checkered flag + speed swoosh).
 - Web-based **pharmacy staffing marketplace** connecting workers/pharmacists with pharmacies/employers.
 - Client: Bobby. Prepared by: Zia Arsalan. Fixed cost **$2,200**, 6–8 weeks, **5 milestones**.
-- Source of truth: `QUOTATION - Bobby Pharma APP (1).pdf`. Brand: `docs/BRAND.md`.
+- Source of truth: `client-docs/QUOTATION - Bobby Pharma APP (1).pdf`. Brand: `docs/BRAND.md`.
 - Brand colors: navy `#0A2A5E`, blue `#1565E0`, azure `#2E9BFF` on white (in `client/tailwind.config.js` as `brand.*`). Logo: `client/public/shiftstarter-logo.png`.
 - Internal identifiers (GitHub repo `pharmacy-staffing`, npm package names) stay as-is; only user-facing name is ShiftStarter.
 
@@ -22,6 +22,7 @@ Durable, portable knowledge for any Claude session on any machine. Keep concise.
 - **Milestone/batch mode** (not granular tasks). Milestones M1–M5 in `MILESTONES.md`.
 - Run via `/start` / `/start M2` / `/start M2 --skip-qa`.
 - Pipeline: plan → **approve** → develop → QA → (bugs → **approve** → fix → retest) → changelog → commit → push **branch `M<n>`**. See `docs/WORKFLOW.md`.
+- **Client updates (user, 2026-11-17):** every completed milestone gets a progress-update PDF **and** a Claude Slides walkthrough deck in the M1/M2 style. Pattern, deck links and sources: `client-docs/README.md`.
 - **Git rule (user, 2026-11-17):** every milestone on its own branch `M<n>`; **never push or merge to `main` without the user's explicit permission** for that push. M1 and M2 were pushed to `main` before this rule; branches `M1`/`M2` exist on origin.
 - Two approval gates on by default (`approval_required: true`); designed to be flippable later.
 

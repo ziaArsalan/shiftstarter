@@ -1,0 +1,178 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>ShiftStarter — Milestone 2 Update</title>
+<!-- Source of client-docs/ShiftStarter-Milestone-2-Update.pdf. Copy this folder for the next milestone.
+     Render: "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --allow-file-access-from-files
+             --no-pdf-header-footer --print-to-pdf=<out.pdf> file://<this folder>/update.html
+     Pages are fixed Letter size with overflow hidden: check every page fits after editing. -->
+<style>
+  @page { size: Letter; margin: 0; }
+  :root {
+    --navy: #0A2A5E; --navy-deep: #001040; --blue: #1565E0; --azure: #2E9BFF;
+    --ink: #0A1F3C; --muted: #5B6B82; --surface-muted: #F3F6FB; --green: #1FA34A;
+  }
+  * { box-sizing: border-box; }
+  html, body { margin: 0; background: #fff; }
+  body { font-family: -apple-system, "Helvetica Neue", Helvetica, Arial, sans-serif; color: var(--ink); -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  .page { width: 8.5in; height: 11in; overflow: hidden; padding: 0.45in 0.75in 0.4in; position: relative; page-break-after: always; display: flex; flex-direction: column; }
+  .page:last-child { page-break-after: auto; }
+
+  header { display: flex; align-items: center; gap: 22px; }
+  header img { width: 128px; }
+  .htitle .eyebrow { font-size: 11px; font-weight: 700; letter-spacing: .06em; color: var(--muted); text-transform: uppercase; }
+  .htitle h1 { margin: 2px 0 2px; font-size: 30px; color: var(--navy); }
+  .htitle .sub { font-size: 15px; color: var(--ink); }
+  .hmeta { margin-left: auto; text-align: right; font-size: 12.5px; color: var(--muted); line-height: 1.75; }
+  .rule { height: 4px; border-radius: 2px; background: linear-gradient(90deg, var(--blue), var(--azure)); margin: 14px 0 14px; }
+
+  .status { display: flex; align-items: center; gap: 14px; background: var(--surface-muted); border-radius: 12px; padding: 14px 18px; }
+  .check { width: 30px; height: 30px; border-radius: 50%; background: var(--green); display: grid; place-items: center; flex: none; }
+  .check svg { width: 16px; height: 16px; }
+  .status .t { font-size: 17px; white-space: nowrap; font-weight: 700; color: var(--navy); }
+  .status .r { margin-left: auto; font-size: 13px; color: var(--muted); white-space: nowrap; }
+
+  h2 { font-size: 17px; color: var(--navy); margin: 16px 0 9px; display: inline-block; padding-bottom: 5px; border-bottom: 3px solid; border-image: linear-gradient(90deg, var(--blue), var(--azure)) 1; }
+  .items { display: grid; gap: 8px; }
+  .item { display: grid; grid-template-columns: 22px 1fr; gap: 12px; align-items: start; }
+  .dot { width: 20px; height: 20px; border-radius: 50%; background: var(--blue); display: grid; place-items: center; margin-top: 1px; }
+  .dot svg { width: 11px; height: 11px; }
+  .item b { display: block; font-size: 14px; color: var(--ink); margin-bottom: 2px; }
+  .item span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+  .roles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .role { background: var(--surface-muted); border-radius: 10px; padding: 11px 13px; }
+  .role .k { font-size: 10.5px; font-weight: 700; letter-spacing: .06em; text-transform: uppercase; color: var(--blue); margin-bottom: 5px; }
+  .role .v { font-size: 12.5px; color: var(--ink); line-height: 1.5; }
+
+  .road { position: relative; display: grid; grid-template-columns: repeat(5, 1fr); margin: 6px 0 4px; }
+  .road::before { content: ""; position: absolute; left: 10%; right: 10%; top: 38px; height: 3px; background: linear-gradient(90deg, var(--blue), var(--azure)); }
+  .stop { text-align: center; position: relative; }
+  .stop .tag { height: 16px; font-size: 10.5px; font-weight: 700; letter-spacing: .04em; }
+  .stop .tag.done { color: var(--green); } .stop .tag.upnext { color: var(--blue); }
+  .node { width: 38px; height: 38px; margin: 3px auto 6px; border-radius: 50%; display: grid; place-items: center; font-size: 13px; font-weight: 700; background: #fff; border: 3px solid var(--azure); color: var(--muted); position: relative; }
+  .node.done { background: var(--green); border-color: var(--green); }
+  .node.cur { background: var(--blue); border-color: var(--blue); color: #fff; }
+  .node svg { width: 18px; height: 18px; }
+  .stop .lbl { font-size: 11.5px; color: var(--muted); line-height: 1.3; }
+  .stop .lbl.strong { color: var(--ink); font-weight: 700; }
+
+  .next { background: var(--navy-deep); color: #fff; border-radius: 12px; padding: 12px 20px; margin-top: 10px; }
+  .next .e { color: var(--azure); font-weight: 700; font-size: 13px; letter-spacing: .02em; }
+  .next .t { font-size: 16px; font-weight: 700; margin: 3px 0 4px; }
+  .next .d { font-size: 12.5px; color: #C9D6EE; line-height: 1.5; }
+
+  .cards { display: grid; grid-template-columns: repeat(3, 1fr); gap: 12px; }
+  .card { background: var(--surface-muted); border-radius: 10px; padding: 12px 14px; }
+  .card b { display: flex; align-items: center; gap: 8px; font-size: 13.5px; color: var(--navy); margin-bottom: 4px; }
+  .card b::before { content: ""; width: 9px; height: 9px; border-radius: 50%; background: var(--blue); flex: none; }
+  .card span { font-size: 11.5px; color: var(--muted); line-height: 1.45; }
+
+  .asks { display: grid; gap: 9px; }
+  .ask { display: grid; grid-template-columns: 26px 1fr; gap: 10px; border: 1px solid #DCE5F3; border-radius: 10px; padding: 9px 14px; }
+  .num { width: 24px; height: 24px; border-radius: 50%; background: var(--navy); color: #fff; font-size: 12px; font-weight: 700; display: grid; place-items: center; }
+  .ask b { display: block; font-size: 13.5px; margin-bottom: 2px; }
+  .ask span { font-size: 12.5px; color: var(--muted); line-height: 1.45; }
+
+  .closing { text-align: center; font-size: 12.5px; color: var(--ink); margin: 12px 0 12px; }
+  footer { margin-top: auto; padding-top: 10px; border-top: 4px solid; border-image: linear-gradient(90deg, var(--blue), var(--azure)) 1; display: flex; justify-content: space-between; font-size: 11px; color: var(--muted); }
+</style>
+</head>
+<body>
+
+<!-- ============ PAGE 1 ============ -->
+<section class="page">
+  <header>
+    <img src="logo.png" alt="ShiftStarter">
+    <div class="htitle">
+      <div class="eyebrow">Project progress update</div>
+      <h1>ShiftStarter</h1>
+      <div class="sub">Pharmacy Staffing Marketplace</div>
+    </div>
+    <div class="hmeta">November 17, 2026<br>Prepared by Zia Arsalan<br>shiftstarter.ca</div>
+  </header>
+  <div class="rule"></div>
+
+  <div class="status">
+    <div class="check"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+    <div class="t">Milestone 2 Complete &nbsp;—&nbsp; Core Platform &amp; User Roles</div>
+    <div class="r">On track · 2 of 5 milestones</div>
+  </div>
+
+  <h2>What we completed</h2>
+  <div class="items">
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Secure accounts &amp; login</b><span>Sign-up, login, logout, and password reset, built on Supabase as agreed on our November 12 call. Each user is guided to the right dashboard for their role.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Profiles for pharmacy professionals</b><span>Pharmacists, technicians, assistants, and students each get a profile with their role, experience, location, and rate.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Pharmacy accounts with owners &amp; managers</b><span>A pharmacy signs up as its own organization. The owner manages the profile and store locations and can invite managers to help run them.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Licence &amp; credential uploads</b><span>Professionals upload their licence and certificates as PDFs to secure private storage. The admin approves or rejects each one with a note, and the professional sees the result.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Super admin portal</b><span>One place to see every user and pharmacy, work through the credential review queue, and manage the pharmacy chain catalog.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Pharmacy chain branding</b><span>The admin adds chains with their logos, and each pharmacy picks its chain. This sets up the branded shift listings coming in Milestone 3.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Works on phone, tablet &amp; desktop</b><span>Every screen adapts to smaller screens, in ShiftStarter's colours and logo.</span></div></div>
+  </div>
+
+  <h2>Who can do what</h2>
+  <div class="roles">
+    <div class="role"><div class="k">Pharmacy professionals</div><div class="v">Pharmacist · Pharmacy Technician · Pharmacy Assistant · Pharmacy Student</div></div>
+    <div class="role"><div class="k">Pharmacy team</div><div class="v"><b>Owner</b>: full control, including team members.<br><b>Manager</b>: runs locations, but can't change the team.</div></div>
+    <div class="role"><div class="k">Platform</div><div class="v"><b>Super admin</b>: oversees all users and pharmacies, reviews credentials, and manages chains.</div></div>
+  </div>
+
+  <footer><span>ShiftStarter · shiftstarter.ca</span><span>Pharmacy Staffing Marketplace</span><span>Confidential project update for Bobby</span></footer>
+</section>
+
+<!-- ============ PAGE 2 ============ -->
+<section class="page">
+  <h2 style="margin-top:0">Tested before handover</h2>
+  <div class="items">
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Tested like a real user</b><span>Every feature was tested in a real browser. Issues found were fixed and retested before sign-off.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Each pharmacy's data stays private</b><span>One pharmacy can't see or change another's details, locations, or staff, in the app or in the database.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>Credential files are protected</b><span>Only the professional who uploaded a licence and the admin can open it. Unsafe or disguised files are rejected.</span></div></div>
+    <div class="item"><div class="dot"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div>
+      <div><b>One account, one role</b><span>Each email is either a professional's account or a pharmacy team member's. Someone who is both uses a second email.</span></div></div>
+  </div>
+
+  <h2>Project roadmap</h2>
+  <div class="road">
+    <div class="stop"><div class="tag done">DONE</div><div class="node done"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="lbl strong">Planning &amp;<br>Architecture</div></div>
+    <div class="stop"><div class="tag done">DONE</div><div class="node done"><svg viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3.2" stroke-linecap="round" stroke-linejoin="round"><path d="M5 12.5l4.5 4.5L19 7.5"/></svg></div><div class="lbl strong">Core Platform<br>&amp; User Roles</div></div>
+    <div class="stop"><div class="tag upnext">NEXT</div><div class="node cur">M3</div><div class="lbl strong">Shifts, Search,<br>Bookings &amp; Rewards</div></div>
+    <div class="stop"><div class="tag"></div><div class="node">M4</div><div class="lbl">Payments,<br>Messaging &amp; More</div></div>
+    <div class="stop"><div class="tag"></div><div class="node">M5</div><div class="lbl">QA, Deploy<br>&amp; Launch</div></div>
+  </div>
+
+  <div class="next">
+    <div class="e">NEXT STEP &nbsp;—&nbsp; awaiting your go-ahead</div>
+    <div class="t">Milestone 3 — Shifts, Search, Bookings &amp; Rewards</div>
+    <div class="d">Pharmacies post shifts, and professionals search by location and filters, apply, and get booked. Shift listings carry each pharmacy's chain branding. The rewards program follows, letting professionals earn rewards for completed shifts and redeem them as gift cards.</div>
+  </div>
+
+  <h2>What we need from you</h2>
+  <div class="asks">
+    <div class="ask"><div class="num">1</div><div><b>Blackhawk account for rewards</b><span>A Blackhawk developer account with sandbox API keys. We need it before we can build gift-card redemption in Milestone 3.</span></div></div>
+    <div class="ask"><div class="num">2</div><div><b>An email sender for ShiftStarter</b><span>Supabase's starter mailer sends only a few login and password-reset emails an hour. Before launch we'll connect a proper service on a ShiftStarter address (e.g. no-reply@shiftstarter.ca), and we'll guide you through it.</span></div></div>
+  </div>
+
+  <h2>Why this matters</h2>
+  <div class="cards">
+    <div class="card"><b>Ready for many pharmacies</b><span>Each pharmacy gets its own private space, so ShiftStarter can grow from one store to whole chains.</span></div>
+    <div class="card"><b>Trusted professionals</b><span>Every licence is reviewed by an admin. This lets us make sure only verified professionals take shifts.</span></div>
+    <div class="card"><b>Mobile-ready</b><span>Still API-first, so a future mobile app can reuse everything built here.</span></div>
+  </div>
+
+  <p class="closing">Questions or feedback? I'm happy to walk you through any of this. Just reply to this message.</p>
+
+  <footer><span>ShiftStarter · shiftstarter.ca</span><span>Pharmacy Staffing Marketplace</span><span>Confidential project update for Bobby</span></footer>
+</section>
+</body>
+</html>

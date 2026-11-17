@@ -1,0 +1,49 @@
+<section id="datamodel" data-transition="fade" style="background:#F7F9FC;color:#0A1F3C;font-family:'Inter', Arial, sans-serif;padding:128px 128px 160px;display:flex;flex-direction:column;gap:48px">
+<div style="display:flex;flex-direction:column;gap:12px">
+<p style="font-size:24px;font-weight:600;letter-spacing:3px;text-transform:uppercase;color:#1565E0">Database design</p>
+<h2 style="font-family:'Space Grotesk', Arial, sans-serif;font-size:72px;font-weight:700;line-height:1.1;color:#0A2A5E">16 tables, one connected model</h2>
+</div>
+<div style="display:flex;flex-direction:row;align-items:center;gap:0px">
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFFFF;border:2px solid #1565E0;padding:24px 16px;border-radius:16px;align-items:center">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#0A2A5E">Pharmacy</p>
+<p style="font-size:24px;color:#4A5568">Business</p>
+</div>
+<x-connector style="width:56px;color:#1565E0;border-width:3px" head="end"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFFFF;border:2px solid #1565E0;padding:24px 16px;border-radius:16px;align-items:center">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#0A2A5E">Location</p>
+<p style="font-size:24px;color:#4A5568">Physical site</p>
+</div>
+<x-connector style="width:56px;color:#1565E0;border-width:3px" head="end"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFFFF;border:2px solid #1565E0;padding:24px 16px;border-radius:16px;align-items:center">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#0A2A5E">Shift</p>
+<p style="font-size:24px;color:#4A5568">Staffing need</p>
+</div>
+<x-connector style="width:56px;color:#1565E0;border-width:3px" head="end"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#FFFFFF;border:2px solid #1565E0;padding:24px 16px;border-radius:16px;align-items:center">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#0A2A5E">Application</p>
+<p style="font-size:24px;color:#4A5568">Worker applies</p>
+</div>
+<x-connector style="width:56px;color:#1565E0;border-width:3px" head="end"></x-connector>
+<div style="flex:1;display:flex;flex-direction:column;gap:4px;background:#0A2A5E;padding:24px 16px;border-radius:16px;align-items:center">
+<p style="font-family:'Space Grotesk', Arial, sans-serif;font-size:32px;font-weight:700;color:#FFFFFF">Booking</p>
+<p style="font-size:24px;color:#C9D8EE">Confirmed job</p>
+</div>
+</div>
+<div style="display:flex;flex-direction:row;gap:24px">
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFFFF;border:1px solid #DCE3EE;padding:32px;border-radius:16px">
+<h3 style="font-size:28px;font-weight:600;color:#1565E0">Around each worker</h3>
+<p style="font-size:28px;line-height:1.4;color:#0A1F3C">Profile · Credentials · Availability</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFFFF;border:1px solid #DCE3EE;padding:32px;border-radius:16px">
+<h3 style="font-size:28px;font-weight:600;color:#1565E0">Around each booking</h3>
+<p style="font-size:28px;line-height:1.4;color:#0A1F3C">Payments · Reviews · Disputes · Messages</p>
+</div>
+<div style="flex:1;display:flex;flex-direction:column;gap:12px;background:#FFFFFF;border:1px solid #DCE3EE;padding:32px;border-radius:16px">
+<h3 style="font-size:28px;font-weight:600;color:#1565E0">Platform</h3>
+<p style="font-size:28px;line-height:1.4;color:#0A1F3C">Users · Secure sessions · Notifications</p>
+</div>
+</div>
+<p style="position:absolute;left:128px;bottom:64px;width:1200px;font-size:24px;color:#5A6880">ShiftStarter · Milestone 1 walkthrough · Initial database migration already created</p>
+<p style="position:absolute;right:128px;bottom:64px;width:200px;text-align:right;font-size:24px;color:#5A6880">06</p>
+<aside>This is the heart of the marketplace. A pharmacy has one or more locations; each location hosts shifts; workers apply to shifts; an accepted application becomes a booking. Everything else hangs off the booking — payments, reviews, disputes and the message thread between the two sides. Around each worker we store their profile, credentials and availability. In total that’s 16 tables, and the first database migration is already generated, so Milestone 2 starts on a real database.</aside>
+</section>

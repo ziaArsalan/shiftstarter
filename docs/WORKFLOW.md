@@ -29,6 +29,8 @@ COMMIT → PUSH BRANCH M<n>   (per GIT.md; never main)            [git-publisher
       ↓
 MERGE TO main               ← only with the user's explicit permission
       ↓
+CLIENT UPDATE               (progress PDF + walkthrough deck, per client-docs/README.md; user reviews before sending)
+      ↓
 MARK MILESTONE done         (MILESTONES.md)
 ```
 

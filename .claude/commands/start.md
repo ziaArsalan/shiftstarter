@@ -40,6 +40,7 @@ Actions:
 
 ## Step 6 — Publish
 - Invoke **git-publisher**: update CHANGELOG → mark milestone `done` in MILESTONES.md → commit (Conventional Commits) on `M<n>` → push branch `M<n>`. It verifies no secrets and stops on remote/auth failure.
+- **Client update:** draft the milestone's progress-update PDF and walkthrough deck per [client-docs/README.md](../../client-docs/README.md), and show both to the user before anything goes to the client.
 - **Merge to `main` is NOT part of /start.** Tell the user `M<n>` is pushed and ask; only merge/push `main` with their explicit permission.
 
 ## Throughout

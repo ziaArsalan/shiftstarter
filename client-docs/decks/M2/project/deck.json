@@ -1,0 +1,18 @@
+{
+  "v": 5,
+  "createdOnFiles": { "v": 1, "at": "2026-11-17T06:00:00Z" },
+  "lists": "css",
+  "format": { "v": 1, "shared": ["project/deck.css"] },
+  "title": "ShiftStarter — Milestone 2 Walkthrough",
+  "order": ["cover", "roadmap", "delivered", "platform", "roles", "journeys", "tested", "decisions", "next", "thanks"],
+  "sections": {
+    "s1": { "description": "Where we are in the project", "start": "cover" },
+    "s2": { "description": "What Milestone 2 delivered: the first working version of the platform", "start": "delivered" },
+    "s3": { "description": "Decisions, what we need from you and what comes next", "start": "decisions" }
+  },
+  "faces": {
+    "space-grotesk": { "family": "Space Grotesk", "href": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Inter:wght@400;600&display=swap" },
+    "inter": { "family": "Inter", "href": "https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@300..700&family=Inter:wght@400;600&display=swap" }
+  },
+  "designSystems": []
+}
