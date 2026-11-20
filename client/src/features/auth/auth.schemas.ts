@@ -12,10 +12,14 @@ export const registerSchema = z
     email: z.string().min(1, "Email is required").email("Enter a valid email address"),
     password: z.string().min(8, "Password must be at least 8 characters"),
     fullName: z.string().trim().optional(),
+    // The role <select> starts at "" and keeps that value when hidden (pharmacy intent);
+    // treat "" as "not selected" so it can't fail validation on a field that isn't shown.
+    // (Required for workers via superRefine below; "" is falsy so it still fails there.)
     workerRole: z
       .enum(["PHARMACIST", "PHARMACY_TECHNICIAN", "PHARMACY_ASSISTANT", "PHARMACY_STUDENT"], {
         error: "Please select your role",
       })
+      .or(z.literal(""))
       .optional(),
     organizationName: z.string().trim().optional(),
   })
