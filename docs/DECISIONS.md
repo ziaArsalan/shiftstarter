@@ -64,20 +64,31 @@ Chronological. Each: context → decision → why. Only significant decisions.
 
 ---
 
-## ADR-013 — Staging preview before M3 (hosting) — PROPOSED, pending client
+## ADR-013 — Staging preview before M3 (hosting) — SUPERSEDED by ADR-014
 **Context:** 2026-11-17 — the client can't see the app (it only runs locally). Hosting was deferred to M5.
 **Decision (proposed):** Stand up an early **staging** environment before M3: frontend on **Vercel** (or Cloudflare Pages), Node API on **Render** (always-on instance), Supabase (separate staging project preferred), transactional email via **Resend** (or Postmark), served at `staging.shiftstarter.ca`. All accounts are **owned and paid by the client**; Zia is invited as a team member (no shared passwords). Production deploy stays in M5.
 **Why:** Lets the client click through each milestone; no VPS to run; ~US$7–10/month for staging. Confirm providers and costs with the client before creating anything.
 
+## ADR-014 — Separate super admin portal (`admin/`) + one API — ACCEPTED, build in M3
+**Context:** 2026-11-20 — Zia wants the platform owner's control panel separate from the product, so a break in one app doesn't take down the other. Today the admin pages live inside `client/` under `/admin/*`.
+**Decision:** Three parts, one repo:
+- `client/` → `app.shiftstarter.ca` — the product: pharmacy orgs (OWNER/MANAGER) and workers. Admin pages removed; a SUPER_ADMIN who logs in here is pointed to the portal.
+- `admin/` (new, same stack as `client/`, dev port 5174) → `admin.shiftstarter.ca` — super admin portal. Login only, no sign-up; rejects non-SUPER_ADMIN. Moves Dashboard, Users, Organizations, Credential queue, Chains out of `client/src/features/admin`. Shared bits (Supabase client, API helper, UI kit) are copied, not a shared package.
+- `server/` → `api.shiftstarter.ca` — the single API for both web apps and the future mobile app. Only change: `CLIENT_ORIGIN` accepts a comma-separated list of origins (CORS).
+- Platform side has **one role only: SUPER_ADMIN (owner)**. No platform manager role or team invites (no schema change). Resolves the "super admin mechanism" open decision: keep the `app_metadata` claim mirrored into `Profile.platformRole`.
+- Root scripts gain `dev:admin`; `install:all`, `lint`, `typecheck`, `build` include `admin/`.
+- Hosting: VPS with pm2 (API) + nginx (static `client/dist`, `admin/dist`, proxy `api.` → :4000) + certbot. Supersedes the Vercel/Render proposal in ADR-013.
+**Why:** Isolates the owner's portal from the product (separate build/deploy, separate session), keeps one backend so web and mobile share the same rules; API RBAC stays the real security boundary. Deferred from 2026-11-20 because of the client demo that day; first task of M3.
+
 ### Open decisions (deferred, ask before deciding)
-- **Super admin mechanism** — Supabase user with an `app_metadata` `platform_role=SUPER_ADMIN` claim mirrored into `Profile.platformRole` (recommended), vs a separate mechanism. (ADR-010 assumes the claim approach.)
+- ~~Super admin mechanism~~ — **decided 2026-11-20 (ADR-014):** `app_metadata` claim mirrored into `Profile.platformRole`; single SUPER_ADMIN (owner) role, own portal in `admin/`.
 - **First-login provisioning** — Express `POST /auth/bootstrap` vs a Supabase DB trigger that creates the `Profile` on `auth.users` insert.
 - **Prisma under RLS** — treat Express as a trusted tier enforcing tenant scoping in code (recommended), vs propagating JWT claims to Postgres so Prisma also runs under RLS.
 - **Reward policy scope & eligibility** — platform-only default vs per-org override; exact eligible statuses (COMPLETED only) and any anti-abuse rules (per-worker caps, clawback on dispute).
 - **Workers belonging to agencies** — keep workers always independent (recommended now) vs enabling `OrganizationType.AGENCY` tenants later.
 - **New dependencies to approve before the M2 rebuild** — `@supabase/supabase-js`, `jose` (JWKS verify); remove `jsonwebtoken`, `argon2`/`bcryptjs`, `cookie-parser` from the M2 v1 set.
 - **Email + push notification providers** (M4) — note Supabase Auth covers auth emails; marketing/transactional email still open.
-- **Hosting provider** — proposed in ADR-013 (Vercel + Render + Resend, staging before M3); awaiting client confirmation.
+- **Hosting provider** — ADR-014: VPS (pm2 + nginx) on `app.` / `admin.` / `api.shiftstarter.ca`; ADR-013 Vercel/Render proposal superseded.
 - ~~PR-per-milestone vs direct commits to main~~ — **decided 2026-11-17:** branch `M<n>` per milestone; no push/merge to `main` without the user's explicit permission (see GIT.md §Branching).
 
 ### User prerequisites (cannot be created by the build)

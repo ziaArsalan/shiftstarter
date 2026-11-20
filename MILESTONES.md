@@ -35,6 +35,7 @@ Billing/scope map to the quotation ($2,200 total).
 - **Status:** pending
 - **Amount:** $550 (see commercial note — rewards/Blackhawk/branding are added scope)
 - **Goal:** The marketplace loop plus the rewards hook and brand-forward listings.
+- **First task — split the super admin portal (ADR-014):** new `admin/` app (admin.shiftstarter.ca) with the existing admin pages moved out of `client/`; `client/` keeps only org + worker roles; `server/` stays the single API with multi-origin CORS; root scripts + docs (ARCHITECTURE, DEVELOPMENT, README run steps) updated. Single SUPER_ADMIN role, no platform managers.
 - **Proposed split (flag for approval):**
   - **M3a — Core loop:** shift creation/management; search + advanced filters; location/radius search; applications workflow (incl. rate negotiation field); booking workflow; availability & role-based matching; clean/brand-forward shift listings (chain logo).
   - **M3b — Rewards + branding polish:** reward EARN on COMPLETED (ledger), balance/history UI, redemption via **Blackhawk** (catalog, request, status), reward policy admin; finish chain-branding surfaces.
