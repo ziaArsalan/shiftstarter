@@ -123,7 +123,12 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   }, []);
 
   const bootstrap = useCallback(async (payload: BootstrapPayload) => {
-    const data = await api<MeResponse>("/auth/bootstrap", { method: "POST", body: payload });
+    // Hidden form fields (e.g. worker name/role on a pharmacy sign-up) arrive as "";
+    // the API treats them as present-but-empty and rejects them, so drop blanks.
+    const body = Object.fromEntries(
+      Object.entries(payload).filter(([, v]) => !(typeof v === "string" && v.trim() === "")),
+    ) as BootstrapPayload;
+    const data = await api<MeResponse>("/auth/bootstrap", { method: "POST", body });
     setMe(data);
     return data;
   }, []);
