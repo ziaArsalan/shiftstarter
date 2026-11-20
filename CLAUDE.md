@@ -32,6 +32,7 @@ This file is the entry point only. **Do not duplicate content here — follow th
 | QA process | [docs/QA.md](docs/QA.md) |
 | Git workflow & safety | [docs/GIT.md](docs/GIT.md) |
 | Architecture decision records | [docs/DECISIONS.md](docs/DECISIONS.md) |
+| Client's current app — UX baseline to beat (M3 input) | [docs/UX-REFERENCE.md](docs/UX-REFERENCE.md) |
 | Milestones & status | [MILESTONES.md](MILESTONES.md) |
 | Durable project memory (portable) | [memory.md](memory.md) |
 | User-facing changelog | [CHANGELOG.md](CHANGELOG.md) |

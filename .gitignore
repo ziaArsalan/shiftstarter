@@ -48,3 +48,9 @@ test-results/
 
 # Misc
 *.local
+
+# Client reference recordings (contain real workers' names and phone numbers)
+mobile-app-demo/
+
+# Playwright MCP session logs
+.playwright-mcp/

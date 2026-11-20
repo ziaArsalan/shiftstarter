@@ -1,0 +1,66 @@
+{
+  "model": "opus",
+  "mcpServers": {
+    "playwright": {
+      "command": "npx",
+      "args": [
+        "@playwright/mcp@latest"
+      ]
+    }
+  },
+  "permissions": {
+    "allow": [
+      "Bash(npm:*)",
+      "Bash(npx:*)",
+      "Bash(node:*)",
+      "Bash(tsc:*)",
+      "Bash(eslint:*)",
+      "Bash(prettier:*)",
+      "Bash(prisma:*)",
+      "Bash(npx prisma:*)",
+      "Bash(git status:*)",
+      "Bash(git diff:*)",
+      "Bash(git log:*)",
+      "Bash(git show:*)",
+      "Bash(git branch:*)",
+      "Bash(git rev-parse:*)",
+      "Bash(git add:*)",
+      "Bash(git commit:*)",
+      "Bash(git pull:*)",
+      "Bash(git fetch:*)",
+      "Bash(git remote add:*)",
+      "Bash(git remote -v)",
+      "Bash(gh auth status)",
+      "Bash(gh repo view:*)",
+      "Bash(curl -s http://localhost:*)",
+      "Bash(ls:*)",
+      "Bash(mkdir -p:*)",
+      "Bash(find . *)",
+      "Bash(grep:*)",
+      "Bash(rg:*)",
+      "Bash(pkill -f vite)",
+      "Bash(pkill -f tsx)",
+      "Read(./**)",
+      "Edit(./**)",
+      "Write(./**)",
+      "Bash(git push -u origin M*)"
+    ],
+    "deny": [
+      "Bash(git push --force:*)",
+      "Bash(git push -f:*)",
+      "Bash(git reset --hard:*)",
+      "Read(./.env)",
+      "Read(./client/.env)",
+      "Read(./server/.env)",
+      "Write(./.env)",
+      "Write(./client/.env)",
+      "Write(./server/.env)"
+    ],
+    "ask": [
+      "Bash(git push origin main:*)",
+      "Bash(git push origin HEAD:main:*)",
+      "Bash(git push -u origin main:*)",
+      "Bash(git merge:*)"
+    ]
+  }
+}
