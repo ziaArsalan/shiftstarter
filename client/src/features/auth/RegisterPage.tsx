@@ -47,7 +47,7 @@ export function RegisterPage() {
       const { needsEmailConfirmation } = await signUp(values.email, values.password, {
         intent: values.intent,
         fullName: values.fullName,
-        workerRole: values.workerRole,
+        workerRole: values.workerRole || undefined,
         organizationName: values.organizationName,
       });
       if (needsEmailConfirmation) {
@@ -59,7 +59,7 @@ export function RegisterPage() {
       const me = await bootstrap({
         intent: values.intent,
         fullName: values.fullName,
-        workerRole: values.workerRole,
+        workerRole: values.workerRole || undefined,
         organizationName: values.organizationName,
       });
       navigate(dashboardPathFor(me.capabilities), { replace: true });
